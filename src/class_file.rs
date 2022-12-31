@@ -1,12 +1,11 @@
-#![allow(dead_code)]
-
 #[derive(Debug, PartialEq)]
 pub struct ClassFile {
     magic: [u8; 4],
     minor_version: [u8; 2],
     major_version: [u8; 2],
-    constant_pool_count: u16,
-    constant_pool: Vec<CpInfo>,
+    // The original fields constant_pool_count, constant_pool are in the constant_pool structure below,
+    // and the original constant_pool has been renamed to cp_infos.
+    constant_pool: ConstantPool,
     access_flags: u16,
     this_class: u16,
     super_class: u16,
@@ -30,14 +29,7 @@ impl ClassFile {
 
         let major_version: [u8; 2] = read_n(&bytes, &mut offset);
 
-        let constant_pool_count: u16 = read_u16(&bytes, &mut offset);
-
-        let mut constant_pool: Vec<CpInfo> = Vec::new();
-        // The constant_pool table is indexed from 1 to constant_pool_count - 1. .. https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
-        for _ in 1..constant_pool_count {
-            let cp = CpInfo::read(&bytes, &mut offset);
-            constant_pool.push(cp);
-        };
+        let constant_pool: ConstantPool = ConstantPool::read(&bytes, &mut offset);
 
         let access_flags: u16 = read_u16(&bytes, &mut offset);
 
@@ -75,7 +67,6 @@ impl ClassFile {
             magic,
             minor_version,
             major_version,
-            constant_pool_count,
             constant_pool,
             access_flags,
             this_class,
@@ -91,16 +82,74 @@ impl ClassFile {
         }
     }
 
+    // 4.8. Format Checking
+    // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.8
     fn check_format(&self) -> () {
+        // The first four bytes must contain the right magic number.
         if self.magic != [0xca, 0xfe, 0xba, 0xbe] {
             panic!("The first four bytes must contain the right magic number.")
         }
+
+        // 4.7. Attributes
+        // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7
+        //
+        // Attributes are used in the ClassFile, field_info, method_info, Code_attribute, and record_component_info
+        // structures of the class file format (§4.1, §4.5, §4.6, §4.7.3, §4.7.30).
+        //
+        // For all attributes, the attribute_name_index item must be a valid unsigned 16-bit index into the constant pool of the class.
+        // The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure (§4.4.7) representing the name of the attribute.
+        let all_attribute_name_index_iter = self.attributes.iter().map(|x| x.attribute_name_index)
+            .chain(self.fields.iter().flat_map(|a| a.attributes.iter().map(|y| y.attribute_name_index)))
+            .chain(self.methods.iter().flat_map(|a| a.attributes.iter().map(|y| y.attribute_name_index)));
+        // TODO: add Code_attribute https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.3
+        // TODO: add record_component_info https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.30
+        for attribute_name_index in all_attribute_name_index_iter {
+            let cp_info = self.constant_pool.get_constant_pool_info(attribute_name_index as usize);
+            match cp_info {
+                CpInfo::ConstantUtf8Info { tag: CONSTANT_UTF8, .. } => (),
+                _ => panic!("attribute's constant_pool entry must be a CONSTANT_Utf8_info structure!")
+            }
+        }
+
+        // All predefined attributes (§4.7) must be of the proper length, except for StackMapTable,
+        // RuntimeVisibleAnnotations, RuntimeInvisibleAnnotations, RuntimeVisibleParameterAnnotations,
+        // RuntimeInvisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, RuntimeInvisibleTypeAnnotations, and AnnotationDefault.
     }
 
     pub fn load(bytes: &[u8]) -> ClassFile {
         let cf = ClassFile::read_from_bytes(bytes);
         cf.check_format();
         cf
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ConstantPool {
+    constant_pool_count: u16,
+    cp_infos: Vec<CpInfo>,
+}
+
+impl ConstantPool {
+    fn read(bytes: &[u8], offset: &mut usize) -> ConstantPool {
+        let constant_pool_count: u16 = read_u16(&bytes, &mut *offset);
+
+        let mut cp_infos: Vec<CpInfo> = Vec::new();
+        // The constant_pool table is indexed from 1 to constant_pool_count - 1. .. https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
+        for _ in 1..constant_pool_count {
+            let cp = CpInfo::read(&bytes, &mut *offset);
+            cp_infos.push(cp);
+        };
+
+        ConstantPool {
+            constant_pool_count,
+            cp_infos,
+        }
+    }
+
+    // original constant_pool table is indexed from 1 to constant_pool_count - 1.
+    // NOTICE: A call to get_constant_pool_info(0) yields an error.
+    fn get_constant_pool_info(&self, index: usize) -> &CpInfo {
+        self.cp_infos.get(index - 1).unwrap()
     }
 }
 
@@ -363,7 +412,7 @@ pub struct MethodInfo {
     name_index: u16,
     descriptor_index: u16,
     attributes_count: u16,
-    attributes: Vec<AttributeInfo>,
+    attributes: Vec<CodeAttributeInfo>,
 }
 
 impl MethodInfo {
@@ -372,9 +421,9 @@ impl MethodInfo {
         let name_index: u16 = read_u16(&bytes, &mut *offset);
         let descriptor_index: u16 = read_u16(&bytes, &mut *offset);
         let attributes_count: u16 = read_u16(&bytes, &mut *offset);
-        let mut attributes: Vec<AttributeInfo> = Vec::new();
+        let mut attributes: Vec<CodeAttributeInfo> = Vec::new();
         for _ in 0..attributes_count {
-            attributes.push(AttributeInfo::read(&bytes, &mut *offset));
+            attributes.push(CodeAttributeInfo::read(&bytes, &mut *offset));
         }
         MethodInfo {
             access_flags,
@@ -410,6 +459,274 @@ impl AttributeInfo {
     }
 }
 
+// 4.7.3. The Code Attribute
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.3
+// The Code attribute is a variable-length attribute in the attributes table of a method_info structure
+#[derive(Debug, PartialEq)]
+pub struct CodeAttributeInfo {
+    attribute_name_index: u16,
+    attribute_length: u32,
+    max_stack: u16,
+    max_locals: u16,
+    code_length: u32,
+    code: Vec<u8>,
+    exception_table_length: u16,
+    exception_table: Vec<ExceptionTable>,
+    attributes_count: u16,
+    attributes: Vec<AttributeInfo>,
+}
+
+impl CodeAttributeInfo {
+    fn read(bytes: &[u8], offset: &mut usize) -> CodeAttributeInfo {
+        let attribute_name_index: u16 = read_u16(&bytes, &mut *offset);
+        let attribute_length: u32 = read_u32(&bytes, &mut *offset);
+        let max_stack: u16 = read_u16(&bytes, &mut *offset);
+        let max_locals: u16 = read_u16(&bytes, &mut *offset);
+        let code_length: u32 = read_u32(&bytes, &mut *offset);
+        let mut code: Vec<u8> = Vec::new();
+        for _ in 0..code_length {
+            code.push(read_u8(&bytes, &mut *offset))
+        }
+        let exception_table_length: u16 = read_u16(&bytes, &mut *offset);
+        let mut exception_table: Vec<ExceptionTable> = Vec::new();
+        for _ in 0..exception_table_length {
+            exception_table.push(ExceptionTable::read(&bytes, &mut *offset))
+        }
+        let attributes_count: u16 = read_u16(&bytes, &mut *offset);
+        let mut attributes: Vec<AttributeInfo> = Vec::new();
+        for _ in 0..attributes_count {
+            attributes.push(AttributeInfo::read(&bytes, &mut *offset))
+        }
+        CodeAttributeInfo {
+            attribute_name_index,
+            attribute_length,
+            max_stack,
+            max_locals,
+            code_length,
+            code,
+            exception_table_length,
+            exception_table,
+            attributes_count,
+            attributes,
+        }
+    }
+}
+
+// 4.7.4. The StackMapTable Attribute
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.4
+// The StackMapTable attribute is a variable-length attribute in the attributes table of a Code attribute (§4.7.3).
+// StackMapTable attribute is used during the process of verification by type checking (§4.10.1).
+#[derive(Debug, PartialEq)]
+#[allow(dead_code)]
+pub struct StackMapTableAttribute {
+    attribute_name_index: u16,
+    attribute_length: u32,
+    number_of_entries: u16,
+    entries: Vec<StackMapFrame>,
+}
+
+#[allow(dead_code)]
+impl StackMapTableAttribute {
+    fn read(bytes: &[u8], offset: &mut usize) -> StackMapTableAttribute {
+        let attribute_name_index: u16 = read_u16(&bytes, &mut *offset);
+        let attribute_length: u32 = read_u32(&bytes, &mut *offset);
+        let number_of_entries: u16 = read_u16(&bytes, &mut *offset);
+        let mut entries: Vec<StackMapFrame> = Vec::new();
+        for _ in 0..number_of_entries {
+            entries.push(StackMapFrame::read(&bytes, &mut *offset));
+        }
+        StackMapTableAttribute {
+            attribute_name_index,
+            attribute_length,
+            number_of_entries,
+            entries,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+#[allow(dead_code)]
+enum StackMapFrame {
+    SameFrame {
+        frame_type: u8 // = SAME; /* 0-63 */
+    },
+    SameLocals1StackItemFrame {
+        frame_type: u8,
+        // = SAME_LOCALS_1_STACK_ITEM; /* 64-127 */
+        stack: Vec<VerificationTypeInfo>, // length is 1 fixed.
+    },
+    SameLocals1StackItemFrameExtended {
+        frame_type: u8,
+        // = SAME_LOCALS_1_STACK_ITEM_EXTENDED; /* 247 */
+        offset_delta: u16,
+        stack: Vec<VerificationTypeInfo>, // length is 1 fixed.
+    },
+    ChopFrame {
+        frame_type: u8,
+        // = CHOP; /* 248-250 */
+        offset_delta: u16,
+    },
+    SameFrameExtended {
+        frame_type: u8,
+        // = SAME_FRAME_EXTENDED; /* 251 */
+        offset_delta: u16,
+    },
+    AppendFrame {
+        frame_type: u8,
+        // = APPEND; /* 252-254 */
+        offset_delta: u16,
+        locals: Vec<VerificationTypeInfo>, // length is frame_type - 251
+    },
+    FullFrame {
+        frame_type: u8,
+        // = FULL_FRAME; /* 255 */
+        offset_delta: u16,
+        number_of_locals: u16,
+        locals: Vec<VerificationTypeInfo>,
+        // length is number_of_locals
+        number_of_stack_items: u16,
+        stack: Vec<VerificationTypeInfo>, // length is number_of_stack_items
+    },
+}
+
+#[allow(dead_code)]
+impl StackMapFrame {
+    fn read(bytes: &[u8], offset: &mut usize) -> StackMapFrame {
+        let frame_type: u8 = read_u8(&bytes, &mut *offset);
+        match frame_type {
+            0..=63 => StackMapFrame::SameFrame { frame_type },
+            64..=127 => StackMapFrame::SameLocals1StackItemFrame {
+                frame_type,
+                stack: VerificationTypeInfo::read(&bytes, &mut *offset, 1),
+            },
+            247 => StackMapFrame::SameLocals1StackItemFrameExtended {
+                frame_type,
+                offset_delta: read_u16(&bytes, &mut *offset),
+                stack: VerificationTypeInfo::read(&bytes, &mut *offset, 1),
+            },
+            248..=250 => StackMapFrame::ChopFrame {
+                frame_type,
+                offset_delta: read_u16(&bytes, &mut *offset),
+            },
+            251 => StackMapFrame::SameFrameExtended {
+                frame_type,
+                offset_delta: read_u16(&bytes, &mut *offset),
+            },
+            252..=254 => StackMapFrame::AppendFrame {
+                frame_type,
+                offset_delta: read_u16(&bytes, &mut *offset),
+                locals: VerificationTypeInfo::read(&bytes, &mut *offset, (frame_type - 251) as u16),
+            },
+            255 => {
+                let offset_delta = read_u16(&bytes, &mut *offset);
+                let number_of_locals = read_u16(&bytes, &mut *offset);
+                let locals = VerificationTypeInfo::read(&bytes, &mut *offset, number_of_locals as u16);
+                let number_of_stack_items = read_u16(&bytes, &mut *offset);
+                let stack = VerificationTypeInfo::read(&bytes, &mut *offset, number_of_stack_items as u16);
+                StackMapFrame::FullFrame {
+                    frame_type,
+                    offset_delta,
+                    number_of_locals,
+                    locals,
+                    number_of_stack_items,
+                    stack,
+                }
+            },
+            _ => panic!()
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+#[allow(dead_code)]
+pub enum VerificationTypeInfo {
+    TopVariableInfo {
+        tag: u8 // = ITEM_Top; /* 0 */
+    },
+    IntegerVariableInfo {
+        tag: u8 // = ITEM_Integer; /* 1 */
+    },
+    FloatVariableInfo {
+        tag: u8 // = ITEM_Float; /* 2 */
+    },
+    DoubleVariableInfo {
+        tag: u8 // = ITEM_Double; /* 3 */
+    },
+    LongVariableInfo {
+        tag: u8 // = ITEM_Long; /* 4 */
+    },
+    NullVariableInfo {
+        tag: u8 // = ITEM_Null; /* 5 */
+    },
+    UninitializedThisVariableInfo {
+        tag: u8 // = ITEM_UninitializedThis; /* 6 */
+    },
+    ObjectVariableInfo {
+        tag: u8,
+        // = ITEM_Object; /* 7 */
+        cpool_index: u16,
+    },
+    UninitializedVariableInfo {
+        tag: u8,
+        // = ITEM_Uninitialized; /* 8 */
+        offset: u16,
+    },
+}
+
+#[allow(dead_code)]
+impl VerificationTypeInfo {
+    fn read(bytes: &[u8], offset: &mut usize, num_of_items: u16) -> Vec<VerificationTypeInfo> {
+        let mut items: Vec<VerificationTypeInfo> = Vec::new();
+        for _ in 0..num_of_items {
+            let tag: u8 = read_u8(&bytes, &mut *offset);
+            let item = match tag {
+                0 => VerificationTypeInfo::TopVariableInfo { tag },
+                1 => VerificationTypeInfo::IntegerVariableInfo { tag },
+                2 => VerificationTypeInfo::FloatVariableInfo { tag },
+                3 => VerificationTypeInfo::DoubleVariableInfo { tag },
+                4 => VerificationTypeInfo::LongVariableInfo { tag },
+                5 => VerificationTypeInfo::NullVariableInfo { tag },
+                6 => VerificationTypeInfo::UninitializedThisVariableInfo { tag },
+                7 => VerificationTypeInfo::ObjectVariableInfo {
+                    tag,
+                    cpool_index: read_u16(&bytes, &mut *offset),
+                },
+                8 => VerificationTypeInfo::UninitializedVariableInfo {
+                    tag,
+                    offset: read_u16(&bytes, &mut *offset),
+                },
+                _ => panic!()
+            };
+            items.push(item)
+        }
+        items
+    }
+}
+
+
+#[derive(Debug, PartialEq)]
+pub struct ExceptionTable {
+    start_pc: u16,
+    end_pc: u16,
+    handler_pc: u16,
+    catch_type: u16,
+}
+
+impl ExceptionTable {
+    fn read(bytes: &[u8], offset: &mut usize) -> ExceptionTable {
+        let start_pc: u16 = read_u16(&bytes, &mut *offset);
+        let end_pc: u16 = read_u16(&bytes, &mut *offset);
+        let handler_pc: u16 = read_u16(&bytes, &mut *offset);
+        let catch_type: u16 = read_u16(&bytes, &mut *offset);
+        ExceptionTable {
+            start_pc,
+            end_pc,
+            handler_pc,
+            catch_type,
+        }
+    }
+}
+
 fn read_n<const N: usize>(bytes: &[u8], offset: &mut usize) -> [u8; N] {
     let next = *offset + N;
     let a: [u8; N] = bytes[*offset..next].try_into().unwrap();
@@ -427,10 +744,6 @@ fn read_u16(bytes: &[u8], offset: &mut usize) -> u16 {
 
 fn read_u32(bytes: &[u8], offset: &mut usize) -> u32 {
     u32::from_be_bytes(read_n::<4>(&bytes, &mut *offset))
-}
-
-fn read_u64(bytes: &[u8], offset: &mut usize) -> u64 {
-    u64::from_be_bytes(read_n::<8>(&bytes, &mut *offset))
 }
 
 fn read_u8_vec(bytes: &[u8], offset: &mut usize, length: usize) -> Vec<u8> {
@@ -467,31 +780,35 @@ fn test() {
 
     let class_file = ClassFile::load(bytes);
 
+    // println!("{:#04x?}", class_file);
+
     assert_eq!(class_file, ClassFile {
         magic: [0xca, 0xfe, 0xba, 0xbe],
         minor_version: [0x00, 0x00],
         major_version: [0x00, 0x3e],
-        constant_pool_count: 19,
-        constant_pool: vec![
-            CpInfo::ConstantMethodrefInfo { tag: 10, class_index: 2, name_and_type_index: 3 },
-            CpInfo::ConstantClassInfo { tag: 7, name_index: 4 },
-            CpInfo::ConstantNameAndTypeInfo { tag: 12, name_index: 5, descriptor_index: 6 },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 16, bytes: vec![0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c, 0x61, 0x6e, 0x67, 0x2f, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 6, bytes: vec![0x3c, 0x69, 0x6e, 0x69, 0x74, 0x3e] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x28, 0x29, 0x56] },
-            CpInfo::ConstantMethodrefInfo { tag: 10, class_index: 8, name_and_type_index: 9 },
-            CpInfo::ConstantClassInfo { tag: 7, name_index: 10 },
-            CpInfo::ConstantNameAndTypeInfo { tag: 12, name_index: 11, descriptor_index: 12 },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 7, bytes: vec![0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x61, 0x64, 0x64] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 5, bytes: vec![0x28, 0x49, 0x49, 0x29, 0x49] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 4, bytes: vec![0x43, 0x6f, 0x64, 0x65] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 15, bytes: vec![0x4c, 0x69, 0x6e, 0x65, 0x4e, 0x75, 0x6d, 0x62, 0x65, 0x72, 0x54, 0x61, 0x62, 0x6c, 0x65] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 4, bytes: vec![0x70, 0x72, 0x6f, 0x67] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x28, 0x29, 0x49] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 10, bytes: vec![0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x46, 0x69, 0x6c, 0x65] },
-            CpInfo::ConstantUtf8Info { tag: 1, length: 12, bytes: vec![0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32, 0x2e, 0x6a, 0x61, 0x76, 0x61] },
-        ],
+        constant_pool: ConstantPool {
+            constant_pool_count: 19,
+            cp_infos: vec![
+                CpInfo::ConstantMethodrefInfo { tag: 10, class_index: 2, name_and_type_index: 3 },
+                CpInfo::ConstantClassInfo { tag: 7, name_index: 4 },
+                CpInfo::ConstantNameAndTypeInfo { tag: 12, name_index: 5, descriptor_index: 6 },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 16, bytes: vec![0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c, 0x61, 0x6e, 0x67, 0x2f, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 6, bytes: vec![0x3c, 0x69, 0x6e, 0x69, 0x74, 0x3e] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x28, 0x29, 0x56] },
+                CpInfo::ConstantMethodrefInfo { tag: 10, class_index: 8, name_and_type_index: 9 },
+                CpInfo::ConstantClassInfo { tag: 7, name_index: 10 },
+                CpInfo::ConstantNameAndTypeInfo { tag: 12, name_index: 11, descriptor_index: 12 },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 7, bytes: vec![0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x61, 0x64, 0x64] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 5, bytes: vec![0x28, 0x49, 0x49, 0x29, 0x49] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 4, bytes: vec![0x43, 0x6f, 0x64, 0x65] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 15, bytes: vec![0x4c, 0x69, 0x6e, 0x65, 0x4e, 0x75, 0x6d, 0x62, 0x65, 0x72, 0x54, 0x61, 0x62, 0x6c, 0x65] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 4, bytes: vec![0x70, 0x72, 0x6f, 0x67] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x28, 0x29, 0x49] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 10, bytes: vec![0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x46, 0x69, 0x6c, 0x65] },
+                CpInfo::ConstantUtf8Info { tag: 1, length: 12, bytes: vec![0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32, 0x2e, 0x6a, 0x61, 0x76, 0x61] },
+            ],
+        },
         access_flags: 32,
         this_class: 8,
         super_class: 2,
@@ -507,10 +824,36 @@ fn test() {
                 descriptor_index: 0x06,
                 attributes_count: 0x01,
                 attributes: vec![
-                    AttributeInfo {
+                    CodeAttributeInfo {
                         attribute_name_index: 0x0d,
                         attribute_length: 0x1d,
-                        info: vec![0, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x2a, 0xb7, 0x00, 0x01, 0xb1, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01],
+                        max_stack: 0x01,
+                        max_locals: 0x01,
+                        code_length: 0x05,
+                        code: vec![
+                            0x2a,
+                            0xb7,
+                            0x00,
+                            0x01,
+                            0xb1,
+                        ],
+                        exception_table_length: 0x00,
+                        exception_table: vec![],
+                        attributes_count: 0x01,
+                        attributes: vec![
+                            AttributeInfo {
+                                attribute_name_index: 0x0e,
+                                attribute_length: 0x06,
+                                info: vec![
+                                    0x00,
+                                    0x01,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x01,
+                                ],
+                            },
+                        ],
                     }
                 ],
             },
@@ -520,11 +863,58 @@ fn test() {
                 descriptor_index: 0x10,
                 attributes_count: 0x01,
                 attributes: vec![
-                    AttributeInfo {
+                    CodeAttributeInfo {
                         attribute_name_index: 0x0d,
                         attribute_length: 0x31,
-                        info: vec![0, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x0d, 0x04, 0x3b, 0x10, 0x2a, 0x3c, 0x1a, 0x1b, 0xb8, 0x00, 0x07, 0x3d, 0x1c, 0xac, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x12, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x02, 0x00, 0x05, 0x00, 0x05, 0x00, 0x06, 0x00, 0x0b, 0x00, 7],
-                    }],
+                        max_stack: 0x02,
+                        max_locals: 0x03,
+                        code_length: 0x0d,
+                        code: vec![
+                            0x04,
+                            0x3b,
+                            0x10,
+                            0x2a,
+                            0x3c,
+                            0x1a,
+                            0x1b,
+                            0xb8,
+                            0x00,
+                            0x07,
+                            0x3d,
+                            0x1c,
+                            0xac,
+                        ],
+                        exception_table_length: 0x00,
+                        exception_table: vec![],
+                        attributes_count: 0x01,
+                        attributes: vec![
+                            AttributeInfo {
+                                attribute_name_index: 0x0e,
+                                attribute_length: 0x12,
+                                info: vec![
+                                    0x00,
+                                    0x04,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x04,
+                                    0x00,
+                                    0x02,
+                                    0x00,
+                                    0x05,
+                                    0x00,
+                                    0x05,
+                                    0x00,
+                                    0x06,
+                                    0x00,
+                                    0x0b,
+                                    0x00,
+                                    0x07,
+                                ],
+                            },
+                        ],
+                    }
+                ],
             },
             MethodInfo {
                 access_flags: 0x09,
@@ -532,11 +922,37 @@ fn test() {
                 descriptor_index: 0x0c,
                 attributes_count: 0x01,
                 attributes: vec![
-                    AttributeInfo {
+                    CodeAttributeInfo {
                         attribute_name_index: 0x0d,
                         attribute_length: 0x1c,
-                        info: vec![0, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x1a, 0x1b, 0x60, 0xac, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b],
-                    }],
+                        max_stack: 0x02,
+                        max_locals: 0x02,
+                        code_length: 0x04,
+                        code: vec![
+                            0x1a,
+                            0x1b,
+                            0x60,
+                            0xac,
+                        ],
+                        exception_table_length: 0x00,
+                        exception_table: vec![],
+                        attributes_count: 0x01,
+                        attributes: vec![
+                            AttributeInfo {
+                                attribute_name_index: 0x0e,
+                                attribute_length: 0x06,
+                                info: vec![
+                                    0x00,
+                                    0x01,
+                                    0x00,
+                                    0x00,
+                                    0x00,
+                                    0x0b,
+                                ],
+                            },
+                        ],
+                    }
+                ],
             },
         ],
         attributes_count: 1,
