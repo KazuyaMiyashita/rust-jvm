@@ -20,6 +20,90 @@ pub struct ClassFile {
     attributes: Vec<AttributeInfo>,
 }
 
+impl ClassFile {
+    fn read_from_bytes(bytes: &[u8]) -> ClassFile {
+        let mut offset: usize = 0;
+
+        let magic: [u8; 4] = read_n(&bytes, &mut offset);
+
+        let minor_version: [u8; 2] = read_n(&bytes, &mut offset);
+
+        let major_version: [u8; 2] = read_n(&bytes, &mut offset);
+
+        let constant_pool_count: u16 = read_u16(&bytes, &mut offset);
+
+        let mut constant_pool: Vec<CpInfo> = Vec::new();
+        // The constant_pool table is indexed from 1 to constant_pool_count - 1. .. https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
+        for _ in 1..constant_pool_count {
+            let cp = CpInfo::read(&bytes, &mut offset);
+            constant_pool.push(cp);
+        };
+
+        let access_flags: u16 = read_u16(&bytes, &mut offset);
+
+        let this_class: u16 = read_u16(&bytes, &mut offset);
+
+        let super_class: u16 = read_u16(&bytes, &mut offset);
+
+        let interfaces_count: u16 = read_u16(&bytes, &mut offset);
+
+        let mut interfaces: Vec<u16> = Vec::new();
+        for _ in 0..interfaces_count {
+            let interface = read_u16(&bytes, &mut offset);
+            interfaces.push(interface);
+        }
+
+        let fields_count: u16 = read_u16(&bytes, &mut offset);
+        let mut fields: Vec<FieldsInfo> = Vec::new();
+        for _ in 0..fields_count {
+            fields.push(FieldsInfo::read(&bytes, &mut offset));
+        }
+
+        let methods_count: u16 = read_u16(&bytes, &mut offset);
+        let mut methods: Vec<MethodInfo> = Vec::new();
+        for _ in 0..methods_count {
+            methods.push(MethodInfo::read(&bytes, &mut offset));
+        }
+
+        let attributes_count: u16 = read_u16(&bytes, &mut offset);
+        let mut attributes: Vec<AttributeInfo> = Vec::new();
+        for _ in 0..attributes_count {
+            attributes.push(AttributeInfo::read(&bytes, &mut offset));
+        }
+
+        ClassFile {
+            magic,
+            minor_version,
+            major_version,
+            constant_pool_count,
+            constant_pool,
+            access_flags,
+            this_class,
+            super_class,
+            interfaces_count,
+            interfaces,
+            fields_count,
+            fields,
+            methods_count,
+            methods,
+            attributes_count,
+            attributes,
+        }
+    }
+
+    fn check_format(&self) -> () {
+        if self.magic != [0xca, 0xfe, 0xba, 0xbe] {
+            panic!("The first four bytes must contain the right magic number.")
+        }
+    }
+
+    pub fn load(bytes: &[u8]) -> ClassFile {
+        let cf = ClassFile::read_from_bytes(bytes);
+        cf.check_format();
+        cf
+    }
+}
+
 type CpInfoTag = u8;
 
 const CONSTANT_UTF8: CpInfoTag = 1;
@@ -63,51 +147,53 @@ pub enum CpInfo {
     },
 }
 
-fn read_cp_info(bytes: &[u8], offset: &mut usize) -> CpInfo {
-    let tag: CpInfoTag = read_u8(&bytes, &mut *offset);
-    match tag {
-        CONSTANT_UTF8 => {
-            let length = read_u16(&bytes, &mut *offset);
-            CpInfo::ConstantUtf8Info {
-                tag,
-                length,
-                bytes: read_u8_vec(&bytes, &mut *offset, length as usize),
+impl CpInfo {
+    fn read(bytes: &[u8], offset: &mut usize) -> CpInfo {
+        let tag: CpInfoTag = read_u8(&bytes, &mut *offset);
+        match tag {
+            CONSTANT_UTF8 => {
+                let length = read_u16(&bytes, &mut *offset);
+                CpInfo::ConstantUtf8Info {
+                    tag,
+                    length,
+                    bytes: read_u8_vec(&bytes, &mut *offset, length as usize),
+                }
             }
-        }
-        CONSTANT_INTEGER => { todo!() }
-        CONSTANT_FLOAT => { todo!() }
-        CONSTANT_LONG => { todo!() }
-        CONSTANT_DOUBLE => { todo!() }
-        CONSTANT_CLASS => {
-            CpInfo::ConstantClassInfo {
-                tag,
-                name_index: read_u16(&bytes, &mut *offset),
+            CONSTANT_INTEGER => { todo!() }
+            CONSTANT_FLOAT => { todo!() }
+            CONSTANT_LONG => { todo!() }
+            CONSTANT_DOUBLE => { todo!() }
+            CONSTANT_CLASS => {
+                CpInfo::ConstantClassInfo {
+                    tag,
+                    name_index: read_u16(&bytes, &mut *offset),
+                }
             }
-        }
-        CONSTANT_STRING => { todo!() }
-        CONSTANT_FIELDREF => { todo!() }
-        CONSTANT_METHODREF => {
-            CpInfo::ConstantMethodrefInfo {
-                tag,
-                class_index: read_u16(&bytes, &mut *offset),
-                name_and_type_index: read_u16(&bytes, &mut *offset),
+            CONSTANT_STRING => { todo!() }
+            CONSTANT_FIELDREF => { todo!() }
+            CONSTANT_METHODREF => {
+                CpInfo::ConstantMethodrefInfo {
+                    tag,
+                    class_index: read_u16(&bytes, &mut *offset),
+                    name_and_type_index: read_u16(&bytes, &mut *offset),
+                }
             }
-        }
-        CONSTANT_INTERFACE_METHODREF => { todo!() }
-        CONSTANT_NAME_AND_TYPE => {
-            CpInfo::ConstantNameAndTypeInfo {
-                tag,
-                name_index: read_u16(&bytes, &mut *offset),
-                descriptor_index: read_u16(&bytes, &mut *offset),
+            CONSTANT_INTERFACE_METHODREF => { todo!() }
+            CONSTANT_NAME_AND_TYPE => {
+                CpInfo::ConstantNameAndTypeInfo {
+                    tag,
+                    name_index: read_u16(&bytes, &mut *offset),
+                    descriptor_index: read_u16(&bytes, &mut *offset),
+                }
             }
+            CONSTANT_METHOD_HANDLE => { todo!() }
+            CONSTANT_METHOD_TYPE => { todo!() }
+            CONSTANT_DYNAMIC => { todo!() }
+            CONSTANT_INVOKE_DYNAMIC => { todo!() }
+            CONSTANT_MODULE => { todo!() }
+            CONSTANT_PACKAGE => { todo!() }
+            _ => panic!("unsupported tag {}", tag)
         }
-        CONSTANT_METHOD_HANDLE => { todo!() }
-        CONSTANT_METHOD_TYPE => { todo!() }
-        CONSTANT_DYNAMIC => { todo!() }
-        CONSTANT_INVOKE_DYNAMIC => { todo!() }
-        CONSTANT_MODULE => { todo!() }
-        CONSTANT_PACKAGE => { todo!() }
-        _ => panic!("unsupported tag {}", tag)
     }
 }
 
@@ -120,21 +206,23 @@ pub struct FieldsInfo {
     attributes: Vec<AttributeInfo>,
 }
 
-fn read_fields_info(bytes: &[u8], offset: &mut usize) -> FieldsInfo {
-    let access_flags: u16 = read_u16(&bytes, &mut *offset);
-    let name_index: u16 = read_u16(&bytes, &mut *offset);
-    let descriptor_index: u16 = read_u16(&bytes, &mut *offset);
-    let attributes_count: u16 = read_u16(&bytes, &mut *offset);
-    let mut attributes: Vec<AttributeInfo> = Vec::new();
-    for _ in 0..attributes_count {
-        attributes.push(read_attribute_info(&bytes, &mut *offset));
-    }
-    FieldsInfo {
-        access_flags,
-        name_index,
-        descriptor_index,
-        attributes_count,
-        attributes,
+impl FieldsInfo {
+    fn read(bytes: &[u8], offset: &mut usize) -> FieldsInfo {
+        let access_flags: u16 = read_u16(&bytes, &mut *offset);
+        let name_index: u16 = read_u16(&bytes, &mut *offset);
+        let descriptor_index: u16 = read_u16(&bytes, &mut *offset);
+        let attributes_count: u16 = read_u16(&bytes, &mut *offset);
+        let mut attributes: Vec<AttributeInfo> = Vec::new();
+        for _ in 0..attributes_count {
+            attributes.push(AttributeInfo::read(&bytes, &mut *offset));
+        }
+        FieldsInfo {
+            access_flags,
+            name_index,
+            descriptor_index,
+            attributes_count,
+            attributes,
+        }
     }
 }
 
@@ -147,21 +235,23 @@ pub struct MethodInfo {
     attributes: Vec<AttributeInfo>,
 }
 
-fn read_method_info(bytes: &[u8], offset: &mut usize) -> MethodInfo {
-    let access_flags: u16 = read_u16(&bytes, &mut *offset);
-    let name_index: u16 = read_u16(&bytes, &mut *offset);
-    let descriptor_index: u16 = read_u16(&bytes, &mut *offset);
-    let attributes_count: u16 = read_u16(&bytes, &mut *offset);
-    let mut attributes: Vec<AttributeInfo> = Vec::new();
-    for _ in 0..attributes_count {
-        attributes.push(read_attribute_info(&bytes, &mut *offset));
-    }
-    MethodInfo {
-        access_flags,
-        name_index,
-        descriptor_index,
-        attributes_count,
-        attributes,
+impl MethodInfo {
+    fn read(bytes: &[u8], offset: &mut usize) -> MethodInfo {
+        let access_flags: u16 = read_u16(&bytes, &mut *offset);
+        let name_index: u16 = read_u16(&bytes, &mut *offset);
+        let descriptor_index: u16 = read_u16(&bytes, &mut *offset);
+        let attributes_count: u16 = read_u16(&bytes, &mut *offset);
+        let mut attributes: Vec<AttributeInfo> = Vec::new();
+        for _ in 0..attributes_count {
+            attributes.push(AttributeInfo::read(&bytes, &mut *offset));
+        }
+        MethodInfo {
+            access_flags,
+            name_index,
+            descriptor_index,
+            attributes_count,
+            attributes,
+        }
     }
 }
 
@@ -172,18 +262,20 @@ pub struct AttributeInfo {
     info: Vec<u8>,
 }
 
-fn read_attribute_info(bytes: &[u8], offset: &mut usize) -> AttributeInfo {
-    let attribute_name_index: u16 = read_u16(&bytes, &mut *offset);
-    let attribute_length: u32 = read_u32(&bytes, &mut *offset);
-    let mut info: Vec<u8> = Vec::new();
-    for _ in 0..attribute_length {
-        let i = read_u8(&bytes, &mut *offset);
-        info.push(i)
-    }
-    AttributeInfo {
-        attribute_name_index,
-        attribute_length,
-        info,
+impl AttributeInfo {
+    fn read(bytes: &[u8], offset: &mut usize) -> AttributeInfo {
+        let attribute_name_index: u16 = read_u16(&bytes, &mut *offset);
+        let attribute_length: u32 = read_u32(&bytes, &mut *offset);
+        let mut info: Vec<u8> = Vec::new();
+        for _ in 0..attribute_length {
+            let i = read_u8(&bytes, &mut *offset);
+            info.push(i)
+        }
+        AttributeInfo {
+            attribute_name_index,
+            attribute_length,
+            info,
+        }
     }
 }
 
@@ -213,79 +305,8 @@ fn read_u8_vec(bytes: &[u8], offset: &mut usize, length: usize) -> Vec<u8> {
     a
 }
 
-pub fn read_class_file(bytes: &[u8]) -> ClassFile {
-    let mut offset: usize = 0;
-
-    let magic: [u8; 4] = read_n(&bytes, &mut offset);
-
-    let minor_version: [u8; 2] = read_n(&bytes, &mut offset);
-
-    let major_version: [u8; 2] = read_n(&bytes, &mut offset);
-
-    let constant_pool_count: u16 = read_u16(&bytes, &mut offset);
-
-    let mut constant_pool: Vec<CpInfo> = Vec::new();
-    // The constant_pool table is indexed from 1 to constant_pool_count - 1. .. https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
-    for _ in 1..constant_pool_count {
-        let cp = read_cp_info(&bytes, &mut offset);
-        constant_pool.push(cp);
-    };
-
-    let access_flags: u16 = read_u16(&bytes, &mut offset);
-
-    let this_class: u16 = read_u16(&bytes, &mut offset);
-
-    let super_class: u16 = read_u16(&bytes, &mut offset);
-
-    let interfaces_count: u16 = read_u16(&bytes, &mut offset);
-
-    let mut interfaces: Vec<u16> = Vec::new();
-    for _ in 0..interfaces_count {
-        let interface = read_u16(&bytes, &mut offset);
-        interfaces.push(interface);
-    }
-
-    let fields_count: u16 = read_u16(&bytes, &mut offset);
-    let mut fields: Vec<FieldsInfo> = Vec::new();
-    for _ in 0..fields_count {
-        fields.push(read_fields_info(&bytes, &mut offset));
-    }
-
-    let methods_count: u16 = read_u16(&bytes, &mut offset);
-    let mut methods: Vec<MethodInfo> = Vec::new();
-    for _ in 0..methods_count {
-        methods.push(read_method_info(&bytes, &mut offset));
-    }
-
-    let attributes_count: u16 = read_u16(&bytes, &mut offset);
-    let mut attributes: Vec<AttributeInfo> = Vec::new();
-    for _ in 0..attributes_count {
-        attributes.push(read_attribute_info(&bytes, &mut offset));
-    }
-
-    ClassFile {
-        magic,
-        minor_version,
-        major_version,
-        constant_pool_count,
-        constant_pool,
-        access_flags,
-        this_class,
-        super_class,
-        interfaces_count,
-        interfaces,
-        fields_count,
-        fields,
-        methods_count,
-        methods,
-        attributes_count,
-        attributes,
-    }
-}
-
 #[test]
 fn test() {
-    let mut offset: usize = 0;
     let bytes: &[u8] = &[
         0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00, 0x00, 0x3e, 0x00, 0x13, 0x0a, 0x00, 0x02, 0x00, 0x03, 0x07,
         0x00, 0x04, 0x0c, 0x00, 0x05, 0x00, 0x06, 0x01, 0x00, 0x10, 0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c,
@@ -309,8 +330,7 @@ fn test() {
         0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b,
         0x00, 0x01, 0x00, 0x11, 0x00, 0x00, 0x00, 0x02, 0x00, 0x12];
 
-    let class_file = read_class_file(bytes);
-    // println!("{:x?}", class_file);
+    let class_file = ClassFile::load(bytes);
 
     assert_eq!(class_file, ClassFile {
         magic: [0xca, 0xfe, 0xba, 0xbe],
