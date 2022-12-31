@@ -63,6 +63,12 @@ impl ClassFile {
             attributes.push(AttributeInfo::read(&bytes, &mut offset));
         }
 
+        // 4.8. Format Checking
+        // The class file must not be truncated or have extra bytes at the end.
+        if bytes.len() != offset {
+            panic!("class file too long!")
+        }
+
         ClassFile {
             magic,
             minor_version,
@@ -114,6 +120,23 @@ impl ClassFile {
         // All predefined attributes (§4.7) must be of the proper length, except for StackMapTable,
         // RuntimeVisibleAnnotations, RuntimeInvisibleAnnotations, RuntimeVisibleParameterAnnotations,
         // RuntimeInvisibleParameterAnnotations, RuntimeVisibleTypeAnnotations, RuntimeInvisibleTypeAnnotations, and AnnotationDefault.
+        // - TODO
+
+        // The class file must not be truncated or have extra bytes at the end.
+        // - This is done with ClassFile::read_from_bytes
+
+        // The constant pool must satisfy the constraints documented throughout §4.4.
+        // - タグの範囲
+        //
+        // -- ConstantClassInfo の場合、 name_index は以下を満たす
+        // The value of the name_index item must be a valid index into the constant_pool table.
+        // The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7) representing a valid binary class
+        // or interface name encoded in internal form (§4.2.1).
+        // -- TODO..
+
+        // All field references and method references in the constant pool must have valid names, valid classes, and valid descriptors (§4.3).
+        // -- TODO..
+
     }
 
     pub fn load(bytes: &[u8]) -> ClassFile {
