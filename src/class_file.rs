@@ -126,16 +126,48 @@ const CONSTANT_PACKAGE: CpInfoTag = 20;
 
 #[derive(Debug, PartialEq)]
 pub enum CpInfo {
-    ConstantClassInfo {
-        tag: CpInfoTag,
-        name_index: u16,
-    },
     ConstantUtf8Info {
         tag: CpInfoTag,
         length: u16,
         bytes: Vec<u8>,
     },
+    ConstantIntegerInfo {
+        tag: CpInfoTag,
+        bytes: u32,
+    },
+    ConstantFloatInfo {
+        tag: CpInfoTag,
+        bytes: u32,
+    },
+    ConstantLongInfo {
+        tag: CpInfoTag,
+        high_bytes: u32,
+        low_bytes: u32,
+    },
+    ConstantDoubleInfo {
+        tag: CpInfoTag,
+        high_bytes: u32,
+        low_bytes: u32,
+    },
+    ConstantClassInfo {
+        tag: CpInfoTag,
+        name_index: u16,
+    },
+    ConstantStringInfo {
+        tag: CpInfoTag,
+        string_index: u16,
+    },
+    ConstantFieldrefInfo {
+        tag: CpInfoTag,
+        class_index: u16,
+        name_and_type_index: u16,
+    },
     ConstantMethodrefInfo {
+        tag: CpInfoTag,
+        class_index: u16,
+        name_and_type_index: u16,
+    },
+    ConstantInterfaceMethodrefInfo {
         tag: CpInfoTag,
         class_index: u16,
         name_and_type_index: u16,
@@ -144,6 +176,33 @@ pub enum CpInfo {
         tag: CpInfoTag,
         name_index: u16,
         descriptor_index: u16,
+    },
+    ConstantMethodHandleInfo {
+        tag: CpInfoTag,
+        reference_kind: u8,
+        reference_index: u16,
+    },
+    ConstantMethodTypeInfo {
+        tag: CpInfoTag,
+        descriptor_index: u16,
+    },
+    ConstantDynamicInfo {
+        tag: CpInfoTag,
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    },
+    ConstantInvokeDynamicInfo {
+        tag: CpInfoTag,
+        bootstrap_method_attr_index: u16,
+        name_and_type_index: u16,
+    },
+    ConstantModuleInfo {
+        tag: CpInfoTag,
+        name_index: u16,
+    },
+    ConstantPackageInfo {
+        tag: CpInfoTag,
+        name_index: u16,
     },
 }
 
@@ -159,18 +218,51 @@ impl CpInfo {
                     bytes: read_u8_vec(&bytes, &mut *offset, length as usize),
                 }
             }
-            CONSTANT_INTEGER => { todo!() }
-            CONSTANT_FLOAT => { todo!() }
-            CONSTANT_LONG => { todo!() }
-            CONSTANT_DOUBLE => { todo!() }
+            CONSTANT_INTEGER => {
+                CpInfo::ConstantIntegerInfo {
+                    tag,
+                    bytes: read_u32(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_FLOAT => {
+                CpInfo::ConstantFloatInfo {
+                    tag,
+                    bytes: read_u32(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_LONG => {
+                CpInfo::ConstantLongInfo {
+                    tag,
+                    high_bytes: read_u32(&bytes, &mut *offset),
+                    low_bytes: read_u32(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_DOUBLE => {
+                CpInfo::ConstantDoubleInfo {
+                    tag,
+                    high_bytes: read_u32(&bytes, &mut *offset),
+                    low_bytes: read_u32(&bytes, &mut *offset),
+                }
+            }
             CONSTANT_CLASS => {
                 CpInfo::ConstantClassInfo {
                     tag,
                     name_index: read_u16(&bytes, &mut *offset),
                 }
             }
-            CONSTANT_STRING => { todo!() }
-            CONSTANT_FIELDREF => { todo!() }
+            CONSTANT_STRING => {
+                CpInfo::ConstantStringInfo {
+                    tag,
+                    string_index: read_u16(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_FIELDREF => {
+                CpInfo::ConstantFieldrefInfo {
+                    tag,
+                    class_index: read_u16(&bytes, &mut *offset),
+                    name_and_type_index: read_u16(&bytes, &mut *offset),
+                }
+            }
             CONSTANT_METHODREF => {
                 CpInfo::ConstantMethodrefInfo {
                     tag,
@@ -178,7 +270,13 @@ impl CpInfo {
                     name_and_type_index: read_u16(&bytes, &mut *offset),
                 }
             }
-            CONSTANT_INTERFACE_METHODREF => { todo!() }
+            CONSTANT_INTERFACE_METHODREF => {
+                CpInfo::ConstantInterfaceMethodrefInfo {
+                    tag,
+                    class_index: read_u16(&bytes, &mut *offset),
+                    name_and_type_index: read_u16(&bytes, &mut *offset),
+                }
+            }
             CONSTANT_NAME_AND_TYPE => {
                 CpInfo::ConstantNameAndTypeInfo {
                     tag,
@@ -186,12 +284,45 @@ impl CpInfo {
                     descriptor_index: read_u16(&bytes, &mut *offset),
                 }
             }
-            CONSTANT_METHOD_HANDLE => { todo!() }
-            CONSTANT_METHOD_TYPE => { todo!() }
-            CONSTANT_DYNAMIC => { todo!() }
-            CONSTANT_INVOKE_DYNAMIC => { todo!() }
-            CONSTANT_MODULE => { todo!() }
-            CONSTANT_PACKAGE => { todo!() }
+            CONSTANT_METHOD_HANDLE => {
+                CpInfo::ConstantMethodHandleInfo {
+                    tag,
+                    reference_kind: read_u8(&bytes, &mut *offset),
+                    reference_index: read_u16(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_METHOD_TYPE => {
+                CpInfo::ConstantMethodTypeInfo {
+                    tag,
+                    descriptor_index: read_u16(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_DYNAMIC => {
+                CpInfo::ConstantDynamicInfo {
+                    tag,
+                    bootstrap_method_attr_index: read_u16(&bytes, &mut *offset),
+                    name_and_type_index: read_u16(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_INVOKE_DYNAMIC => {
+                CpInfo::ConstantInvokeDynamicInfo {
+                    tag,
+                    bootstrap_method_attr_index: read_u16(&bytes, &mut *offset),
+                    name_and_type_index: read_u16(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_MODULE => {
+                CpInfo::ConstantModuleInfo {
+                    tag,
+                    name_index: read_u16(&bytes, &mut *offset),
+                }
+            }
+            CONSTANT_PACKAGE => {
+                CpInfo::ConstantPackageInfo {
+                    tag,
+                    name_index: read_u16(&bytes, &mut *offset),
+                }
+            }
             _ => panic!("unsupported tag {}", tag)
         }
     }
@@ -296,6 +427,10 @@ fn read_u16(bytes: &[u8], offset: &mut usize) -> u16 {
 
 fn read_u32(bytes: &[u8], offset: &mut usize) -> u32 {
     u32::from_be_bytes(read_n::<4>(&bytes, &mut *offset))
+}
+
+fn read_u64(bytes: &[u8], offset: &mut usize) -> u64 {
+    u64::from_be_bytes(read_n::<8>(&bytes, &mut *offset))
 }
 
 fn read_u8_vec(bytes: &[u8], offset: &mut usize, length: usize) -> Vec<u8> {
