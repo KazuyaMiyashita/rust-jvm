@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use super::structure::*;
 use thiserror::Error;
 
@@ -20,25 +19,15 @@ pub struct ReadError {
 }
 
 
-fn debug_iter<I: Iterator>(it: I) where I::Item: std::fmt::Debug {
-    for elem in it {
-        println!("{elem:#?}");
-    }
+trait Reader {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized;
 }
 
-trait IReader<T> {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<T> where Self: Sized;
+trait VecReader {
+    fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<Self>> where Self: Sized;
 }
 
-struct Reader {}
-
-trait IVecReader<T> {
-    fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<T>> where Self: Sized;
-}
-
-struct VecReader {}
-
-impl<const N: usize> IReader<[u8; N]> for Reader {
+impl<const N: usize> Reader for [u8; N] {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<[u8; N]> {
         let next = *offset + N;
         if bytes.len() >= next {
@@ -54,41 +43,34 @@ impl<const N: usize> IReader<[u8; N]> for Reader {
     }
 }
 
-impl IReader<u8> for Reader {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<u8> {
+impl Reader for u8 {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> {
         let a: [u8; 1] = Reader::read(&bytes, &mut *offset)?;
         Ok(u8::from_be_bytes(a))
     }
 }
 
-impl IReader<u16> for Reader {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<u16> {
+impl Reader for u16 {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> {
         let a: [u8; 2] = Reader::read(&bytes, &mut *offset)?;
         Ok(u16::from_be_bytes(a))
     }
 }
 
-impl IReader<u32> for Reader {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<u32> {
+impl Reader for u32 {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> {
         let a: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
         Ok(u32::from_be_bytes(a))
     }
 }
 
-impl IVecReader<u8> for VecReader {
-    fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<u8>> {
-        let next = *offset + num_of_items;
-
-        if bytes.len() >= next {
-            let a: Vec<u8> = bytes[*offset..next].to_vec();
-            *offset = next;
-            Ok(a)
-        } else {
-            Err(ReadError {
-                message: "Input is shorter than required and cannot be read.".to_string(),
-                offset: offset.clone(),
-            })
-        }
+impl<T> VecReader for T where T: Reader {
+    fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<T>> where Self: Sized {
+        let mut items: Vec<T> = Vec::new();
+        for _ in 0..num_of_items {
+            items.push(T::read(&bytes, &mut *offset)?);
+        };
+        Ok(items)
     }
 }
 
@@ -97,7 +79,7 @@ fn error<T>(message: String, offset: &mut usize) -> Result<T> {
     Err(ReadError { message, offset: offset.clone() })
 }
 
-impl IReader<ClassFile> for Reader {
+impl Reader for ClassFile {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ClassFile> {
         let magic: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
 
@@ -190,7 +172,7 @@ impl IReader<ClassFile> for Reader {
     }
 }
 
-impl IReader<ConstantPool> for Reader {
+impl Reader for ConstantPool {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ConstantPool> {
         let constant_pool_count: u16 = Reader::read(&bytes, &mut *offset)?;
 
@@ -209,7 +191,7 @@ impl IReader<ConstantPool> for Reader {
     }
 }
 
-impl IReader<CpInfo> for Reader {
+impl Reader for CpInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<CpInfo> {
         let tag: CpInfoTag = Reader::read(&bytes, &mut *offset)?;
         let cp_info = match tag {
@@ -332,7 +314,7 @@ impl IReader<CpInfo> for Reader {
     }
 }
 
-impl IReader<FieldsInfo> for Reader {
+impl Reader for FieldsInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<FieldsInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
         let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -352,7 +334,7 @@ impl IReader<FieldsInfo> for Reader {
     }
 }
 
-impl IReader<MethodInfo> for Reader {
+impl Reader for MethodInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<MethodInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
         let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -372,7 +354,7 @@ impl IReader<MethodInfo> for Reader {
     }
 }
 
-impl IReader<AttributeInfo> for Reader {
+impl Reader for AttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<AttributeInfo> {
         let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
@@ -389,7 +371,7 @@ impl IReader<AttributeInfo> for Reader {
     }
 }
 
-impl IReader<CodeAttributeInfo> for Reader {
+impl Reader for CodeAttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<CodeAttributeInfo> {
         let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
@@ -427,7 +409,7 @@ impl IReader<CodeAttributeInfo> for Reader {
 
 
 #[allow(dead_code)]
-impl IReader<StackMapTableAttribute> for Reader {
+impl Reader for StackMapTableAttribute {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<StackMapTableAttribute> {
         let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
@@ -446,7 +428,7 @@ impl IReader<StackMapTableAttribute> for Reader {
 }
 
 #[allow(dead_code)]
-impl IReader<StackMapFrame> for Reader {
+impl Reader for StackMapFrame {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<StackMapFrame> {
         let frame_type: u8 = Reader::read(&bytes, &mut *offset)?;
         let stack_map_frame = match frame_type {
@@ -495,7 +477,7 @@ impl IReader<StackMapFrame> for Reader {
 }
 
 #[allow(dead_code)]
-impl IVecReader<VerificationTypeInfo> for VecReader {
+impl VecReader for VerificationTypeInfo {
     fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<VerificationTypeInfo>> {
         let mut items: Vec<VerificationTypeInfo> = Vec::new();
         for _ in 0..num_of_items {
@@ -524,7 +506,7 @@ impl IVecReader<VerificationTypeInfo> for VecReader {
     }
 }
 
-impl IReader<ExceptionTable> for Reader {
+impl Reader for ExceptionTable {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ExceptionTable> {
         let start_pc: u16 = Reader::read(&bytes, &mut *offset)?;
         let end_pc: u16 = Reader::read(&bytes, &mut *offset)?;

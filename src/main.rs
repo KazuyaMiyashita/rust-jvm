@@ -1,6 +1,5 @@
 pub mod class_file;
 
-use class_file::structure::ClassFile;
 use class_file::reader;
 
 fn main() {
