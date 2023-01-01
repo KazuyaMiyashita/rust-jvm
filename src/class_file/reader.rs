@@ -1,4 +1,6 @@
 use super::structure::*;
+use super::checker::Checker;
+
 use thiserror::Error;
 
 
@@ -79,35 +81,31 @@ fn error<T>(message: String, offset: &mut usize) -> Result<T> {
     Err(ReadError { message, offset: offset.clone() })
 }
 
+impl Reader for Magic {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
+        let value: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
+        Ok(Magic { value })
+    }
+}
+
+impl Reader for Version {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
+        let minor_version: u16 = Reader::read(&bytes, &mut *offset)?;
+        let major_version: u16 = Reader::read(&bytes, &mut *offset)?;
+        Ok(Version { minor_version, major_version })
+    }
+}
+
 impl Reader for ClassFile {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ClassFile> {
-        let magic: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
+        let magic: Magic = Reader::read(&bytes, &mut *offset)?;
 
         // check the magic item `cafebabe` at the first early.
-        if magic != [0xca, 0xfe, 0xba, 0xbe] {
-            return error("This is not a class file. The first byte array must be `cafebabe`".to_string(), offset);
-        }
+        magic.check().map_err(|e| ReadError { message: e.message, offset: offset.clone() })?;
 
-        let minor_version: u16 = Reader::read(&bytes, &mut *offset)?;
-
-        let major_version: u16 = Reader::read(&bytes, &mut *offset)?;
-
-        // check the class file version at early.
-        if 56 <= major_version && major_version <= 61 {
-            if minor_version == 0 || minor_version == 65535 {
-                ()
-            } else {
-                return error(format!("invalid class file minor version.\
-                The version of this input is major: {}, minor: {}.", major_version, minor_version), offset);
-            }
-        } else if 56 <= major_version && major_version <= 61 {
-            ()
-        } else {
-            return error(format!(
-                "Not supported class file version. \
-                The version of this input is major: {}, minor: {}.\
-                This JVM is version 17. Class file major versions 45 upto 61 are supported.", major_version, minor_version), offset);
-        }
+        let version: Version = Reader::read(&bytes, &mut *offset)?;
+        // check the class file version early.
+        version.check().map_err(|e| ReadError { message: e.message, offset: offset.clone() })?;
 
         // The rest of the checking done by the class file reader is only checking
         // whether all the bytes at the end have been consumed, and the rest is left to ClassFileChecker
@@ -144,8 +142,7 @@ impl Reader for ClassFile {
 
         Ok(ClassFile {
             magic,
-            minor_version,
-            major_version,
+            version,
             constant_pool,
             access_flags,
             this_class,
@@ -298,10 +295,24 @@ impl Reader for CpInfo {
     }
 }
 
+impl Reader for CpRef {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
+        let value: u16 = Reader::read(&bytes, &mut *offset)?;
+        Ok(CpRef { value })
+    }
+}
+
+impl Reader for CpUtf8Ref {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
+        let value: u16 = Reader::read(&bytes, &mut *offset)?;
+        Ok(CpUtf8Ref { value })
+    }
+}
+
 impl Reader for FieldsInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<FieldsInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
@@ -318,7 +329,7 @@ impl Reader for FieldsInfo {
 impl Reader for MethodInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<MethodInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<CodeAttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
@@ -334,7 +345,7 @@ impl Reader for MethodInfo {
 
 impl Reader for AttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<AttributeInfo> {
-        let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let info: Vec<u8> = VecReader::read(&bytes, &mut *offset, attribute_length as usize)?;
         Ok(AttributeInfo {
@@ -347,7 +358,7 @@ impl Reader for AttributeInfo {
 
 impl Reader for CodeAttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<CodeAttributeInfo> {
-        let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let max_stack: u16 = Reader::read(&bytes, &mut *offset)?;
         let max_locals: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -376,7 +387,7 @@ impl Reader for CodeAttributeInfo {
 #[allow(dead_code)]
 impl Reader for StackMapTableAttribute {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<StackMapTableAttribute> {
-        let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let number_of_entries: u16 = Reader::read(&bytes, &mut *offset)?;
         let entries: Vec<StackMapFrame> = VecReader::read(&bytes, &mut *offset, number_of_entries as usize)?;
@@ -510,9 +521,11 @@ fn test() {
     // println!("{:#04x?}", class_file);
 
     assert_eq!(class_file, Ok(ClassFile {
-        magic: [0xca, 0xfe, 0xba, 0xbe],
-        minor_version: 0,
-        major_version: 61,
+        magic: Magic { value: [0xca, 0xfe, 0xba, 0xbe] },
+        version: Version {
+            minor_version: 0,
+            major_version: 61,
+        },
         constant_pool: ConstantPool {
             constant_pool_count: 19,
             cp_infos: vec![
@@ -547,12 +560,12 @@ fn test() {
         methods: vec![
             MethodInfo {
                 access_flags: 0x00,
-                name_index: 0x05,
+                name_index: CpUtf8Ref { value: 0x05 },
                 descriptor_index: 0x06,
                 attributes_count: 0x01,
                 attributes: vec![
                     CodeAttributeInfo {
-                        attribute_name_index: 0x0d,
+                        attribute_name_index: CpUtf8Ref { value: 0x0d },
                         attribute_length: 0x1d,
                         max_stack: 0x01,
                         max_locals: 0x01,
@@ -569,7 +582,7 @@ fn test() {
                         attributes_count: 0x01,
                         attributes: vec![
                             AttributeInfo {
-                                attribute_name_index: 0x0e,
+                                attribute_name_index:CpUtf8Ref { value: 0x0e },
                                 attribute_length: 0x06,
                                 info: vec![
                                     0x00,
@@ -586,12 +599,12 @@ fn test() {
             },
             MethodInfo {
                 access_flags: 0x09,
-                name_index: 0x0f,
+                name_index: CpUtf8Ref { value: 0x0f },
                 descriptor_index: 0x10,
                 attributes_count: 0x01,
                 attributes: vec![
                     CodeAttributeInfo {
-                        attribute_name_index: 0x0d,
+                        attribute_name_index: CpUtf8Ref { value: 0x0d },
                         attribute_length: 0x31,
                         max_stack: 0x02,
                         max_locals: 0x03,
@@ -616,7 +629,7 @@ fn test() {
                         attributes_count: 0x01,
                         attributes: vec![
                             AttributeInfo {
-                                attribute_name_index: 0x0e,
+                                attribute_name_index: CpUtf8Ref { value: 0x0e },
                                 attribute_length: 0x12,
                                 info: vec![
                                     0x00,
@@ -645,12 +658,12 @@ fn test() {
             },
             MethodInfo {
                 access_flags: 0x09,
-                name_index: 0x0b,
+                name_index: CpUtf8Ref { value: 0x0b },
                 descriptor_index: 0x0c,
                 attributes_count: 0x01,
                 attributes: vec![
                     CodeAttributeInfo {
-                        attribute_name_index: 0x0d,
+                        attribute_name_index: CpUtf8Ref { value: 0x0d },
                         attribute_length: 0x1c,
                         max_stack: 0x02,
                         max_locals: 0x02,
@@ -666,7 +679,7 @@ fn test() {
                         attributes_count: 0x01,
                         attributes: vec![
                             AttributeInfo {
-                                attribute_name_index: 0x0e,
+                                attribute_name_index: CpUtf8Ref { value: 0x0e },
                                 attribute_length: 0x06,
                                 info: vec![
                                     0x00,
@@ -685,7 +698,7 @@ fn test() {
         attributes_count: 1,
         attributes: vec![
             AttributeInfo {
-                attribute_name_index: 17,
+                attribute_name_index: CpUtf8Ref { value: 17 },
                 attribute_length: 2,
                 info: vec![0x00, 0x12],
             }],

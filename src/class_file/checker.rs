@@ -2,7 +2,7 @@ use super::structure::*;
 use thiserror::Error;
 
 pub fn check_class_file(class_file: ClassFile) -> Result<()> {
-    Checker::check(class_file)
+    class_file.check()
 }
 
 pub type Result<T> = std::result::Result<T, CheckError>;
@@ -10,45 +10,128 @@ pub type Result<T> = std::result::Result<T, CheckError>;
 #[derive(Error, Debug)]
 #[error("Invalid class file. {message:}")]
 pub struct CheckError {
-    message: String,
+    pub message: String,
 }
 
-trait IChecker<T> {
-    fn check(content: T) -> Result<()>;
+pub(crate) trait Checker {
+    fn check(&self) -> Result<()>;
 }
 
-struct Checker {}
+// Checking format of some fields requires a ConstantPool reference.
+pub(crate) trait CheckerWithConstantPool {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()>;
+}
+
+// utils
+fn error<T>(message: String) -> Result<T> {
+    Err(CheckError { message })
+}
+
+// 4.1. The ClassFile Structure
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
+//
+// > The magic item supplies the magic number identifying the class file format; it has the value 0xCAFEBABE.
+impl Checker for Magic {
+    fn check(&self) -> Result<()> {
+        match self.value {
+            [0xca, 0xfe, 0xba, 0xbe] => Ok(()),
+            _ => error("This is not a class file. The first byte array must be `cafebabe`".to_string())
+        }
+    }
+}
+
+// 4.1. The ClassFile Structure
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
+//
+// According to the above, Java SE 17 must support major_version 45 upto 61.
+// Also,
+// > For a class file whose major_version is 56 or above, the minor_version must be 0 or 65535.
+// > For a class file whose major_version is between 45 and 55 inclusive, the minor_version may be any value.
+impl Checker for Version {
+    fn check(&self) -> Result<()> {
+        match (self.major_version, self.minor_version) {
+            (56..=61, 0 | 65535) => Ok(()),
+            (56..=61, _) => error(format!("invalid class file minor version.\
+                The version of this input is major: {}, minor: {}.", self.major_version, self.minor_version)),
+            (45..=61, _) => Ok(()),
+            _ => error(format!(
+                "Not supported class file version. \
+                The version of this input is major: {}, minor: {}.\
+                This JVM is version 17. Class file major versions 45 upto 61 are supported.", self.major_version, self.minor_version))
+        }
+    }
+}
+
+// 4.7. Attributes
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7
+//
+// > For all attributes, the attribute_name_index item must be a valid unsigned 16-bit index into the constant pool of the class.
+// > The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure (§4.4.7) representing the name of the attribute.
+impl CheckerWithConstantPool for CpUtf8Ref {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+        let cp_info: &CpInfo = constant_pool.get_constant_pool_info(self.value as usize);
+        match cp_info {
+            CpInfo::ConstantUtf8Info { .. } => Ok(()),
+            _ => error("The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure.".to_string())
+        }
+    }
+}
+
+impl<T: CheckerWithConstantPool> CheckerWithConstantPool for Vec<T> {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+        for t in self {
+            t.check_with_constant_pool(constant_pool)?;
+        }
+        Ok(())
+    }
+}
+
+// impl CheckerWithConstantPool for CpInfo::ConstantClassInfo {
+//     fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+//         self.name_index.get_constant_pool_info(constant_pool)?;
+//         Ok(())
+//     }
+// }
+
+impl CheckerWithConstantPool for AttributeInfo {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.attribute_name_index.check_with_constant_pool(constant_pool)?;
+        Ok(())
+    }
+}
+
+impl CheckerWithConstantPool for FieldsInfo {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.name_index.check_with_constant_pool(constant_pool)?;
+        Ok(())
+    }
+}
+
+impl CheckerWithConstantPool for CodeAttributeInfo {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.attribute_name_index.check_with_constant_pool(constant_pool)?;
+        Ok(())
+    }
+}
+
+impl CheckerWithConstantPool for MethodInfo {
+    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.name_index.check_with_constant_pool(constant_pool)?;
+        self.attributes.check_with_constant_pool(constant_pool)?;
+        Ok(())
+    }
+}
 
 // 4.8. Format Checking
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.8
-impl IChecker<ClassFile> for Checker {
+impl Checker for ClassFile {
+    fn check(&self) -> Result<()> {
+        self.magic.check()?;
+        self.version.check()?;
 
-    fn check(content: ClassFile) -> Result<()> {
-        // The first four bytes must contain the right magic number.
-        if content.magic != [0xca, 0xfe, 0xba, 0xbe] {
-            panic!("The first four bytes must contain the right magic number.")
-        }
-
-        // 4.7. Attributes
-        // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7
-        //
-        // Attributes are used in the ClassFile, field_info, method_info, Code_attribute, and record_component_info
-        // structures of the class file format (§4.1, §4.5, §4.6, §4.7.3, §4.7.30).
-        //
-        // For all attributes, the attribute_name_index item must be a valid unsigned 16-bit index into the constant pool of the class.
-        // The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure (§4.4.7) representing the name of the attribute.
-        let all_attribute_name_index_iter = content.attributes.iter().map(|x| x.attribute_name_index)
-            .chain(content.fields.iter().flat_map(|a| a.attributes.iter().map(|y| y.attribute_name_index)))
-            .chain(content.methods.iter().flat_map(|a| a.attributes.iter().map(|y| y.attribute_name_index)));
-        // TODO: add Code_attribute https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.3
-        // TODO: add record_component_info https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.30
-        for attribute_name_index in all_attribute_name_index_iter {
-            let cp_info = content.constant_pool.get_constant_pool_info(attribute_name_index as usize);
-            match cp_info {
-                CpInfo::ConstantUtf8Info { tag: CONSTANT_UTF8, .. } => (),
-                _ => panic!("attribute's constant_pool entry must be a CONSTANT_Utf8_info structure!")
-            }
-        }
+        self.attributes.check_with_constant_pool(&self.constant_pool)?;
+        self.fields.check_with_constant_pool(&self.constant_pool)?;
+        self.methods.check_with_constant_pool(&self.constant_pool)?;
 
         // All predefined attributes (§4.7) must be of the proper length, except for StackMapTable,
         // RuntimeVisibleAnnotations, RuntimeInvisibleAnnotations, RuntimeVisibleParameterAnnotations,
@@ -65,13 +148,13 @@ impl IChecker<ClassFile> for Checker {
         // The value of the name_index item must be a valid index into the constant_pool table.
         // The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7) representing a valid binary class
         // or interface name encoded in internal form (§4.2.1).
-        let constant_pool_constant_class_info_name_indexes = content.constant_pool.cp_infos.iter()
+        let constant_pool_constant_class_info_name_indexes = self.constant_pool.cp_infos.iter()
             .flat_map(|x| match x {
                 CpInfo::ConstantClassInfo { name_index, .. } => Some(*name_index),
                 _ => None
             });
         for constant_pool_constant_class_info_name_index in constant_pool_constant_class_info_name_indexes {
-            match content.constant_pool.get_constant_pool_info(constant_pool_constant_class_info_name_index as usize) {
+            match self.constant_pool.get_constant_pool_info(constant_pool_constant_class_info_name_index as usize) {
                 CpInfo::ConstantUtf8Info { tag: CONSTANT_UTF8, .. } => (),
                 _ => panic!("The constant_pool entry at ConstantClassInfo's name_index must be a CONSTANT_Utf8_info structure!")
             }
