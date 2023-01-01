@@ -195,7 +195,7 @@ impl ConstantPool {
     }
 
     // original constant_pool table is indexed from 1 to constant_pool_count - 1.
-    // NOTICE: A call to get_constant_pool_info(0) yields an error.
+    // Note that the Vec of this cp_infos structure is indexed from 0.
     fn get_constant_pool_info(&self, index: usize) -> &CpInfo {
         self.cp_infos.get(index - 1).unwrap()
     }
