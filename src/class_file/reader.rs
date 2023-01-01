@@ -122,29 +122,19 @@ impl Reader for ClassFile {
 
         let interfaces_count: u16 = Reader::read(&bytes, &mut *offset)?;
 
-        let mut interfaces: Vec<u16> = Vec::new();
-        for _ in 0..interfaces_count {
-            let interface: u16 = Reader::read(&bytes, &mut *offset)?;
-            interfaces.push(interface);
-        }
+        let interfaces: Vec<u16> = VecReader::read(&bytes, &mut *offset, interfaces_count as usize)?;
 
         let fields_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut fields: Vec<FieldsInfo> = Vec::new();
-        for _ in 0..fields_count {
-            fields.push(Reader::read(&bytes, &mut *offset)?);
-        }
+
+        let fields: Vec<FieldsInfo> = VecReader::read(&bytes, &mut *offset, fields_count as usize)?;
 
         let methods_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut methods: Vec<MethodInfo> = Vec::new();
-        for _ in 0..methods_count {
-            methods.push(Reader::read(&bytes, &mut *offset)?);
-        }
+
+        let methods: Vec<MethodInfo> = VecReader::read(&bytes, &mut *offset, methods_count as usize)?;
 
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut attributes: Vec<AttributeInfo> = Vec::new();
-        for _ in 0..attributes_count {
-            attributes.push(Reader::read(&bytes, &mut *offset)?);
-        }
+
+        let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
 
         // 4.8. Format Checking
         // The class file must not be truncated or have extra bytes at the end.
@@ -175,15 +165,9 @@ impl Reader for ClassFile {
 impl Reader for ConstantPool {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ConstantPool> {
         let constant_pool_count: u16 = Reader::read(&bytes, &mut *offset)?;
-
-        let mut cp_infos: Vec<CpInfo> = Vec::new();
         // The constant_pool table is indexed from 1 to constant_pool_count - 1.
         // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
-        for _ in 1..constant_pool_count {
-            let cp: CpInfo = Reader::read(&bytes, &mut *offset)?;
-            cp_infos.push(cp);
-        };
-
+        let cp_infos: Vec<CpInfo> = VecReader::read(&bytes, &mut *offset, (constant_pool_count - 1) as usize)?;
         Ok(ConstantPool {
             constant_pool_count,
             cp_infos,
@@ -320,10 +304,7 @@ impl Reader for FieldsInfo {
         let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut attributes: Vec<AttributeInfo> = Vec::new();
-        for _ in 0..attributes_count {
-            attributes.push(Reader::read(&bytes, &mut *offset)?);
-        }
+        let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
         Ok(FieldsInfo {
             access_flags,
             name_index,
@@ -340,10 +321,7 @@ impl Reader for MethodInfo {
         let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut attributes: Vec<CodeAttributeInfo> = Vec::new();
-        for _ in 0..attributes_count {
-            attributes.push(Reader::read(&bytes, &mut *offset)?);
-        }
+        let attributes: Vec<CodeAttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
         Ok(MethodInfo {
             access_flags,
             name_index,
@@ -358,11 +336,7 @@ impl Reader for AttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<AttributeInfo> {
         let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
-        let mut info: Vec<u8> = Vec::new();
-        for _ in 0..attribute_length {
-            let i: u8 = Reader::read(&bytes, &mut *offset)?;
-            info.push(i)
-        }
+        let info: Vec<u8> = VecReader::read(&bytes, &mut *offset, attribute_length as usize)?;
         Ok(AttributeInfo {
             attribute_name_index,
             attribute_length,
@@ -378,20 +352,11 @@ impl Reader for CodeAttributeInfo {
         let max_stack: u16 = Reader::read(&bytes, &mut *offset)?;
         let max_locals: u16 = Reader::read(&bytes, &mut *offset)?;
         let code_length: u32 = Reader::read(&bytes, &mut *offset)?;
-        let mut code: Vec<u8> = Vec::new();
-        for _ in 0..code_length {
-            code.push(Reader::read(&bytes, &mut *offset)?)
-        }
+        let code: Vec<u8> = VecReader::read(&bytes, &mut *offset, code_length as usize)?;
         let exception_table_length: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut exception_table: Vec<ExceptionTable> = Vec::new();
-        for _ in 0..exception_table_length {
-            exception_table.push(Reader::read(&bytes, &mut *offset)?)
-        }
+        let exception_table: Vec<ExceptionTable> = VecReader::read(&bytes, &mut *offset, exception_table_length as usize)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut attributes: Vec<AttributeInfo> = Vec::new();
-        for _ in 0..attributes_count {
-            attributes.push(Reader::read(&bytes, &mut *offset)?)
-        }
+        let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
         Ok(CodeAttributeInfo {
             attribute_name_index,
             attribute_length,
@@ -414,10 +379,7 @@ impl Reader for StackMapTableAttribute {
         let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let number_of_entries: u16 = Reader::read(&bytes, &mut *offset)?;
-        let mut entries: Vec<StackMapFrame> = Vec::new();
-        for _ in 0..number_of_entries {
-            entries.push(Reader::read(&bytes, &mut *offset)?);
-        }
+        let entries: Vec<StackMapFrame> = VecReader::read(&bytes, &mut *offset, number_of_entries as usize)?;
         Ok(StackMapTableAttribute {
             attribute_name_index,
             attribute_length,
@@ -477,32 +439,28 @@ impl Reader for StackMapFrame {
 }
 
 #[allow(dead_code)]
-impl VecReader for VerificationTypeInfo {
-    fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<VerificationTypeInfo>> {
-        let mut items: Vec<VerificationTypeInfo> = Vec::new();
-        for _ in 0..num_of_items {
-            let tag: u8 = Reader::read(&bytes, &mut *offset)?;
-            let item = match tag {
-                0 => VerificationTypeInfo::TopVariableInfo { tag },
-                1 => VerificationTypeInfo::IntegerVariableInfo { tag },
-                2 => VerificationTypeInfo::FloatVariableInfo { tag },
-                3 => VerificationTypeInfo::DoubleVariableInfo { tag },
-                4 => VerificationTypeInfo::LongVariableInfo { tag },
-                5 => VerificationTypeInfo::NullVariableInfo { tag },
-                6 => VerificationTypeInfo::UninitializedThisVariableInfo { tag },
-                7 => VerificationTypeInfo::ObjectVariableInfo {
-                    tag,
-                    cpool_index: Reader::read(&bytes, &mut *offset)?,
-                },
-                8 => VerificationTypeInfo::UninitializedVariableInfo {
-                    tag,
-                    offset: Reader::read(&bytes, &mut *offset)?,
-                },
-                _ => return error(format!("Verification type's tag must be 0..8 !. tag: {}", tag), offset)
-            };
-            items.push(item)
-        }
-        Ok(items)
+impl Reader for VerificationTypeInfo {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
+        let tag: u8 = Reader::read(&bytes, &mut *offset)?;
+        let item = match tag {
+            0 => VerificationTypeInfo::TopVariableInfo { tag },
+            1 => VerificationTypeInfo::IntegerVariableInfo { tag },
+            2 => VerificationTypeInfo::FloatVariableInfo { tag },
+            3 => VerificationTypeInfo::DoubleVariableInfo { tag },
+            4 => VerificationTypeInfo::LongVariableInfo { tag },
+            5 => VerificationTypeInfo::NullVariableInfo { tag },
+            6 => VerificationTypeInfo::UninitializedThisVariableInfo { tag },
+            7 => VerificationTypeInfo::ObjectVariableInfo {
+                tag,
+                cpool_index: Reader::read(&bytes, &mut *offset)?,
+            },
+            8 => VerificationTypeInfo::UninitializedVariableInfo {
+                tag,
+                offset: Reader::read(&bytes, &mut *offset)?,
+            },
+            _ => return error(format!("Verification type's tag must be 0..8 !. tag: {}", tag), offset)
+        };
+        Ok(item)
     }
 }
 
@@ -549,7 +507,7 @@ fn test() {
 
     let class_file = read_class_file(bytes);
 
-    println!("{:#04x?}", class_file);
+    // println!("{:#04x?}", class_file);
 
     assert_eq!(class_file, Ok(ClassFile {
         magic: [0xca, 0xfe, 0xba, 0xbe],
