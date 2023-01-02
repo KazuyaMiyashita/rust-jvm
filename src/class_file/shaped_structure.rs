@@ -2,8 +2,7 @@
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
 #[derive(Debug, PartialEq)]
 pub struct ClassFile {
-    pub magic: Magic,
-    // The original fields minor_version, major_version are in the version structure below.
+    // pub magic: Magic, // `magic` is only needed when reading bytes.
     pub version: Version,
     // The original fields constant_pool_count, constant_pool are in the constant_pool structure below,
     // and the original constant_pool has been renamed to cp_infos.
@@ -25,8 +24,9 @@ pub struct Version {
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.4
 #[derive(Debug, PartialEq)]
 pub struct ConstantPool {
-    pub constant_pool_count: u16,
+    // pub constant_pool_count: u16,
     pub cp_infos: Vec<CpInfo>,
+    pub field_refs: Vec<ConstantFieldrefInfo>
 }
 
 impl ConstantPool {
@@ -59,15 +59,17 @@ pub const CONSTANT_MODULE: CpInfoTag = 19;
 pub const CONSTANT_PACKAGE: CpInfoTag = 20;
 
 #[derive(Debug, PartialEq)]
+pub struct ConstantFieldrefInfo {
+    pub tag: CpInfoTag,
+    pub class_index: CpIndex,
+    pub name_and_type_index: CpIndex,
+    pub class_name: String,
+    pub field_name: String,
+    pub field_or_method_type: Or<FieldType, MethodType>,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum CpInfo {
-    ConstantFieldrefInfo {
-        tag: CpInfoTag,
-        class_index: CpIndex,
-        name_and_type_index: CpIndex,
-        class_name: String,
-        field_name: String,
-        field_or_method_type: Or<FieldType, MethodType>,
-    },
     ConstantMethodrefInfo {
         tag: CpInfoTag,
         class_index: CpIndex,
@@ -109,7 +111,8 @@ pub enum FieldType {
     Float,
     Int,
     Long,
-    Class { name: String }, // leading `L` and trailing `;` are removed.
+    Class { name: String },
+    // leading `L` and trailing `;` are removed.
     Short,
     Boolean,
     Array { value: Box<FieldType> },
@@ -168,7 +171,7 @@ fn test_parse_field_type() {
     );
     assert_eq!(
         parse_field_type("Ljava/lang/String;"),
-        Ok(FieldType::Class { name: "java/lang/String".to_string() } )
+        Ok(FieldType::Class { name: "java/lang/String".to_string() })
     );
     assert_eq!(
         parse_field_type("[[[D"),
@@ -188,17 +191,17 @@ fn test_parse_method_descriptor() {
             parameter_types: vec![
                 FieldType::Int,
                 FieldType::Double,
-                FieldType::Class { name: "java/lang/Thread".to_string() }
+                FieldType::Class { name: "java/lang/Thread".to_string() },
             ],
-            return_type: ReturnType::Field { value: FieldType::Class { name: "java/lang/Object".to_string() } } ,
+            return_type: ReturnType::Field { value: FieldType::Class { name: "java/lang/Object".to_string() } },
         })
     );
     assert_eq!(
         parse_method_descriptor("(Ljava/lang/String;I)V"),
         Ok(MethodType {
             parameter_types: vec![
-                FieldType::Class { name: "java/lang/String".to_string() } ,
-                FieldType::Int
+                FieldType::Class { name: "java/lang/String".to_string() },
+                FieldType::Int,
             ],
             return_type: ReturnType::Void,
         })
