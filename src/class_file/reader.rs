@@ -3,7 +3,6 @@ use super::checker::Checker;
 
 use thiserror::Error;
 
-
 pub fn read_class_file(bytes: &[u8]) -> Result<ClassFile> {
     let mut offset: usize = 0;
 
@@ -73,6 +72,17 @@ impl<T> VecReader for T where T: Reader {
             items.push(T::read(&bytes, &mut *offset)?);
         };
         Ok(items)
+    }
+}
+
+struct StringReader {}
+
+impl StringReader {
+    fn read(bytes: &[u8], offset: &mut usize, num_of_bytes: usize) -> Result<String> {
+        let vec: Vec<u8> = VecReader::read(&bytes, offset, num_of_bytes)?;
+        std::str::from_utf8(&*vec)
+            .map(|str| str.to_string())
+            .map_err(|e| ReadError { message: e.to_string(), offset: offset.clone() })
     }
 }
 
@@ -181,7 +191,7 @@ impl Reader for CpInfo {
                 CpInfo::ConstantUtf8Info {
                     tag,
                     length,
-                    bytes: VecReader::read(&bytes, &mut *offset, length as usize)?,
+                    bytes: StringReader::read(&bytes, &mut *offset, length as usize)?,
                 }
             }
             CONSTANT_INTEGER => {
@@ -295,24 +305,10 @@ impl Reader for CpInfo {
     }
 }
 
-impl Reader for CpRef {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
-        let value: u16 = Reader::read(&bytes, &mut *offset)?;
-        Ok(CpRef { value })
-    }
-}
-
-impl Reader for CpUtf8Ref {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
-        let value: u16 = Reader::read(&bytes, &mut *offset)?;
-        Ok(CpUtf8Ref { value })
-    }
-}
-
 impl Reader for FieldsInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<FieldsInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
+        let name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
@@ -329,7 +325,7 @@ impl Reader for FieldsInfo {
 impl Reader for MethodInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<MethodInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
+        let name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<CodeAttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
@@ -345,7 +341,7 @@ impl Reader for MethodInfo {
 
 impl Reader for AttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<AttributeInfo> {
-        let attribute_name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let info: Vec<u8> = VecReader::read(&bytes, &mut *offset, attribute_length as usize)?;
         Ok(AttributeInfo {
@@ -358,7 +354,7 @@ impl Reader for AttributeInfo {
 
 impl Reader for CodeAttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<CodeAttributeInfo> {
-        let attribute_name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let max_stack: u16 = Reader::read(&bytes, &mut *offset)?;
         let max_locals: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -387,7 +383,7 @@ impl Reader for CodeAttributeInfo {
 #[allow(dead_code)]
 impl Reader for StackMapTableAttribute {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<StackMapTableAttribute> {
-        let attribute_name_index: CpUtf8Ref = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let number_of_entries: u16 = Reader::read(&bytes, &mut *offset)?;
         let entries: Vec<StackMapFrame> = VecReader::read(&bytes, &mut *offset, number_of_entries as usize)?;
@@ -490,217 +486,3 @@ impl Reader for ExceptionTable {
     }
 }
 
-
-#[test]
-fn test() {
-    let bytes: &[u8] = &[
-        0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x13, 0x0a, 0x00, 0x02, 0x00, 0x03, 0x07,
-        0x00, 0x04, 0x0c, 0x00, 0x05, 0x00, 0x06, 0x01, 0x00, 0x10, 0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c,
-        0x61, 0x6e, 0x67, 0x2f, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x01, 0x00, 0x06, 0x3c, 0x69, 0x6e,
-        0x69, 0x74, 0x3e, 0x01, 0x00, 0x03, 0x28, 0x29, 0x56, 0x0a, 0x00, 0x08, 0x00, 0x09, 0x07, 0x00,
-        0x0a, 0x0c, 0x00, 0x0b, 0x00, 0x0c, 0x01, 0x00, 0x07, 0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32,
-        0x01, 0x00, 0x03, 0x61, 0x64, 0x64, 0x01, 0x00, 0x05, 0x28, 0x49, 0x49, 0x29, 0x49, 0x01, 0x00,
-        0x04, 0x43, 0x6f, 0x64, 0x65, 0x01, 0x00, 0x0f, 0x4c, 0x69, 0x6e, 0x65, 0x4e, 0x75, 0x6d, 0x62,
-        0x65, 0x72, 0x54, 0x61, 0x62, 0x6c, 0x65, 0x01, 0x00, 0x04, 0x70, 0x72, 0x6f, 0x67, 0x01, 0x00,
-        0x03, 0x28, 0x29, 0x49, 0x01, 0x00, 0x0a, 0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x46, 0x69, 0x6c,
-        0x65, 0x01, 0x00, 0x0c, 0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32, 0x2e, 0x6a, 0x61, 0x76, 0x61,
-        0x00, 0x20, 0x00, 0x08, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x05,
-        0x00, 0x06, 0x00, 0x01, 0x00, 0x0d, 0x00, 0x00, 0x00, 0x1d, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00,
-        0x00, 0x05, 0x2a, 0xb7, 0x00, 0x01, 0xb1, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00,
-        0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x09, 0x00, 0x0f, 0x00, 0x10, 0x00, 0x01, 0x00,
-        0x0d, 0x00, 0x00, 0x00, 0x31, 0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x0d, 0x04, 0x3b, 0x10,
-        0x2a, 0x3c, 0x1a, 0x1b, 0xb8, 0x00, 0x07, 0x3d, 0x1c, 0xac, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e,
-        0x00, 0x00, 0x00, 0x12, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x02, 0x00, 0x05, 0x00, 0x05,
-        0x00, 0x06, 0x00, 0x0b, 0x00, 0x07, 0x00, 0x09, 0x00, 0x0b, 0x00, 0x0c, 0x00, 0x01, 0x00, 0x0d,
-        0x00, 0x00, 0x00, 0x1c, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x1a, 0x1b, 0x60, 0xac,
-        0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b,
-        0x00, 0x01, 0x00, 0x11, 0x00, 0x00, 0x00, 0x02, 0x00, 0x12];
-
-    let class_file = read_class_file(bytes);
-
-    // println!("{:#04x?}", class_file);
-
-    assert_eq!(class_file, Ok(ClassFile {
-        magic: Magic { value: [0xca, 0xfe, 0xba, 0xbe] },
-        version: Version {
-            minor_version: 0,
-            major_version: 61,
-        },
-        constant_pool: ConstantPool {
-            constant_pool_count: 19,
-            cp_infos: vec![
-                CpInfo::ConstantMethodrefInfo { tag: 10, class_index: 2, name_and_type_index: 3 },
-                CpInfo::ConstantClassInfo { tag: 7, name_index: 4 },
-                CpInfo::ConstantNameAndTypeInfo { tag: 12, name_index: 5, descriptor_index: 6 },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 16, bytes: vec![0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c, 0x61, 0x6e, 0x67, 0x2f, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 6, bytes: vec![0x3c, 0x69, 0x6e, 0x69, 0x74, 0x3e] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x28, 0x29, 0x56] },
-                CpInfo::ConstantMethodrefInfo { tag: 10, class_index: 8, name_and_type_index: 9 },
-                CpInfo::ConstantClassInfo { tag: 7, name_index: 10 },
-                CpInfo::ConstantNameAndTypeInfo { tag: 12, name_index: 11, descriptor_index: 12 },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 7, bytes: vec![0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x61, 0x64, 0x64] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 5, bytes: vec![0x28, 0x49, 0x49, 0x29, 0x49] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 4, bytes: vec![0x43, 0x6f, 0x64, 0x65] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 15, bytes: vec![0x4c, 0x69, 0x6e, 0x65, 0x4e, 0x75, 0x6d, 0x62, 0x65, 0x72, 0x54, 0x61, 0x62, 0x6c, 0x65] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 4, bytes: vec![0x70, 0x72, 0x6f, 0x67] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 3, bytes: vec![0x28, 0x29, 0x49] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 10, bytes: vec![0x53, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x46, 0x69, 0x6c, 0x65] },
-                CpInfo::ConstantUtf8Info { tag: 1, length: 12, bytes: vec![0x53, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x32, 0x2e, 0x6a, 0x61, 0x76, 0x61] },
-            ],
-        },
-        access_flags: 32,
-        this_class: 8,
-        super_class: 2,
-        interfaces_count: 0,
-        interfaces: vec![],
-        fields_count: 0,
-        fields: vec![],
-        methods_count: 3,
-        methods: vec![
-            MethodInfo {
-                access_flags: 0x00,
-                name_index: CpUtf8Ref { value: 0x05 },
-                descriptor_index: 0x06,
-                attributes_count: 0x01,
-                attributes: vec![
-                    CodeAttributeInfo {
-                        attribute_name_index: CpUtf8Ref { value: 0x0d },
-                        attribute_length: 0x1d,
-                        max_stack: 0x01,
-                        max_locals: 0x01,
-                        code_length: 0x05,
-                        code: vec![
-                            0x2a,
-                            0xb7,
-                            0x00,
-                            0x01,
-                            0xb1,
-                        ],
-                        exception_table_length: 0x00,
-                        exception_table: vec![],
-                        attributes_count: 0x01,
-                        attributes: vec![
-                            AttributeInfo {
-                                attribute_name_index:CpUtf8Ref { value: 0x0e },
-                                attribute_length: 0x06,
-                                info: vec![
-                                    0x00,
-                                    0x01,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x01,
-                                ],
-                            },
-                        ],
-                    }
-                ],
-            },
-            MethodInfo {
-                access_flags: 0x09,
-                name_index: CpUtf8Ref { value: 0x0f },
-                descriptor_index: 0x10,
-                attributes_count: 0x01,
-                attributes: vec![
-                    CodeAttributeInfo {
-                        attribute_name_index: CpUtf8Ref { value: 0x0d },
-                        attribute_length: 0x31,
-                        max_stack: 0x02,
-                        max_locals: 0x03,
-                        code_length: 0x0d,
-                        code: vec![
-                            0x04,
-                            0x3b,
-                            0x10,
-                            0x2a,
-                            0x3c,
-                            0x1a,
-                            0x1b,
-                            0xb8,
-                            0x00,
-                            0x07,
-                            0x3d,
-                            0x1c,
-                            0xac,
-                        ],
-                        exception_table_length: 0x00,
-                        exception_table: vec![],
-                        attributes_count: 0x01,
-                        attributes: vec![
-                            AttributeInfo {
-                                attribute_name_index: CpUtf8Ref { value: 0x0e },
-                                attribute_length: 0x12,
-                                info: vec![
-                                    0x00,
-                                    0x04,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x04,
-                                    0x00,
-                                    0x02,
-                                    0x00,
-                                    0x05,
-                                    0x00,
-                                    0x05,
-                                    0x00,
-                                    0x06,
-                                    0x00,
-                                    0x0b,
-                                    0x00,
-                                    0x07,
-                                ],
-                            },
-                        ],
-                    }
-                ],
-            },
-            MethodInfo {
-                access_flags: 0x09,
-                name_index: CpUtf8Ref { value: 0x0b },
-                descriptor_index: 0x0c,
-                attributes_count: 0x01,
-                attributes: vec![
-                    CodeAttributeInfo {
-                        attribute_name_index: CpUtf8Ref { value: 0x0d },
-                        attribute_length: 0x1c,
-                        max_stack: 0x02,
-                        max_locals: 0x02,
-                        code_length: 0x04,
-                        code: vec![
-                            0x1a,
-                            0x1b,
-                            0x60,
-                            0xac,
-                        ],
-                        exception_table_length: 0x00,
-                        exception_table: vec![],
-                        attributes_count: 0x01,
-                        attributes: vec![
-                            AttributeInfo {
-                                attribute_name_index: CpUtf8Ref { value: 0x0e },
-                                attribute_length: 0x06,
-                                info: vec![
-                                    0x00,
-                                    0x01,
-                                    0x00,
-                                    0x00,
-                                    0x00,
-                                    0x0b,
-                                ],
-                            },
-                        ],
-                    }
-                ],
-            },
-        ],
-        attributes_count: 1,
-        attributes: vec![
-            AttributeInfo {
-                attribute_name_index: CpUtf8Ref { value: 17 },
-                attribute_length: 2,
-                info: vec![0x00, 0x12],
-            }],
-    }))
-}

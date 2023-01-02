@@ -23,7 +23,7 @@ pub struct ClassFile {
 
 #[derive(Debug, PartialEq)]
 pub struct Magic {
-    pub value: [u8; 4]
+    pub value: [u8; 4],
 }
 
 #[derive(Debug, PartialEq)]
@@ -43,12 +43,13 @@ pub struct ConstantPool {
 impl ConstantPool {
     // original constant_pool table is indexed from 1 to constant_pool_count - 1.
     // Note that the Vec of this cp_infos structure is indexed from 0.
-    pub fn get_constant_pool_info(&self, index: usize) -> &CpInfo {
-        self.cp_infos.get(index - 1).unwrap()
+    pub fn get_constant_pool_info(&self, index: usize) -> Option<&CpInfo> {
+        self.cp_infos.get(index - 1)
     }
 }
 
 pub type CpInfoTag = u8;
+pub type CpIndex = u16;
 
 pub const CONSTANT_UTF8: CpInfoTag = 1;
 pub const CONSTANT_INTEGER: CpInfoTag = 3;
@@ -73,7 +74,7 @@ pub enum CpInfo {
     ConstantUtf8Info {
         tag: CpInfoTag,
         length: u16,
-        bytes: Vec<u8>,
+        bytes: String,
     },
     ConstantIntegerInfo {
         tag: CpInfoTag,
@@ -95,7 +96,7 @@ pub enum CpInfo {
     },
     ConstantClassInfo {
         tag: CpInfoTag,
-        name_index: u16,
+        name_index: CpIndex,
     },
     ConstantStringInfo {
         tag: CpInfoTag,
@@ -103,22 +104,22 @@ pub enum CpInfo {
     },
     ConstantFieldrefInfo {
         tag: CpInfoTag,
-        class_index: u16,
-        name_and_type_index: u16,
+        class_index: CpIndex,
+        name_and_type_index: CpIndex,
     },
     ConstantMethodrefInfo {
         tag: CpInfoTag,
-        class_index: u16,
-        name_and_type_index: u16,
+        class_index: CpIndex,
+        name_and_type_index: CpIndex,
     },
     ConstantInterfaceMethodrefInfo {
         tag: CpInfoTag,
-        class_index: u16,
-        name_and_type_index: u16,
+        class_index: CpIndex,
+        name_and_type_index: CpIndex,
     },
     ConstantNameAndTypeInfo {
         tag: CpInfoTag,
-        name_index: u16,
+        name_index: CpIndex,
         descriptor_index: u16,
     },
     ConstantMethodHandleInfo {
@@ -151,19 +152,9 @@ pub enum CpInfo {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct CpRef {
-    pub value: u16
-}
-
-#[derive(Debug, PartialEq)]
-pub struct CpUtf8Ref {
-    pub value: u16
-}
-
-#[derive(Debug, PartialEq)]
 pub struct FieldsInfo {
     pub access_flags: u16,
-    pub name_index: CpUtf8Ref,
+    pub name_index: CpIndex,
     pub descriptor_index: u16,
     pub attributes_count: u16,
     pub attributes: Vec<AttributeInfo>,
@@ -172,7 +163,7 @@ pub struct FieldsInfo {
 #[derive(Debug, PartialEq)]
 pub struct MethodInfo {
     pub access_flags: u16,
-    pub name_index: CpUtf8Ref,
+    pub name_index: CpIndex,
     pub descriptor_index: u16,
     pub attributes_count: u16,
     pub attributes: Vec<CodeAttributeInfo>,
@@ -181,7 +172,7 @@ pub struct MethodInfo {
 
 #[derive(Debug, PartialEq)]
 pub struct AttributeInfo {
-    pub attribute_name_index: CpUtf8Ref,
+    pub attribute_name_index: CpIndex,
     pub attribute_length: u32,
     pub info: Vec<u8>,
 }
@@ -191,7 +182,7 @@ pub struct AttributeInfo {
 // The Code attribute is a variable-length attribute in the attributes table of a method_info structure
 #[derive(Debug, PartialEq)]
 pub struct CodeAttributeInfo {
-    pub attribute_name_index: CpUtf8Ref,
+    pub attribute_name_index: CpIndex,
     pub attribute_length: u32,
     pub max_stack: u16,
     pub max_locals: u16,
@@ -210,7 +201,7 @@ pub struct CodeAttributeInfo {
 #[derive(Debug, PartialEq)]
 #[allow(dead_code)]
 pub struct StackMapTableAttribute {
-    pub attribute_name_index: CpUtf8Ref,
+    pub attribute_name_index: CpIndex,
     pub attribute_length: u32,
     pub number_of_entries: u16,
     pub entries: Vec<StackMapFrame>,

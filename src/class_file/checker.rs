@@ -13,13 +13,64 @@ pub struct CheckError {
     pub message: String,
 }
 
-pub(crate) trait Checker {
+pub trait Checker {
     fn check(&self) -> Result<()>;
 }
 
 // Checking format of some fields requires a ConstantPool reference.
-pub(crate) trait CheckerWithConstantPool {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()>;
+pub trait CheckerWithConstantPool {
+    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()>;
+}
+
+fn is_constant_utf8_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> Result<()> {
+    match constant_pool.get_constant_pool_info(index as usize) {
+        Some(CpInfo::ConstantUtf8Info { .. }) => Ok(()),
+        Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
+        _ => error("missing constant_pool entry.".to_string())
+    }
+}
+
+fn is_constant_class_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> Result<()> {
+    match constant_pool.get_constant_pool_info(index as usize) {
+        Some(CpInfo::ConstantClassInfo { .. }) => Ok(()),
+        Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
+        _ => error("missing constant_pool entry.".to_string())
+    }
+}
+
+fn is_name_and_type_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> Result<()> {
+    match constant_pool.get_constant_pool_info(index as usize) {
+        Some(CpInfo::ConstantNameAndTypeInfo { .. }) => Ok(()),
+        Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
+        _ => error("missing constant_pool entry.".to_string())
+    }
+}
+
+// 4.2.1. Binary Class and Interface Names
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.2.1
+fn is_valid_internal_class_name(bytes: String) -> Result<()> {
+    // println!("class name: {}", bytes);
+    // todo!()
+    Ok(())
+}
+
+// 4.3.2. Field Descriptors
+// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.3.2
+fn is_valid_field_descriptor(bytes: String) -> Result<()> {
+    let (head, tail) = bytes.split_at(1);
+    match head {
+        "B" | "C" | "D" | "F" | "I" | "J" | "S" | "Z" => Ok(()),
+        "L" => {
+            // Excluding the last character `;`, check if it's the internal form of the class name.
+            tail.to_string().pop();
+            let (class_name, last) = tail.split_at(tail.len() - 1);
+            is_valid_internal_class_name(class_name.to_string())?;
+            if last != ";" { return error("ObjectType of field descriptor must end with `;`".to_string()) }
+            Ok(())
+        },
+        "[" => is_valid_field_descriptor(tail.to_string()),
+        _ => return error("Invalid field descriptor.".to_string())
+    }
 }
 
 // utils
@@ -62,63 +113,123 @@ impl Checker for Version {
     }
 }
 
-// 4.7. Attributes
-// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7
-//
-// > For all attributes, the attribute_name_index item must be a valid unsigned 16-bit index into the constant pool of the class.
-// > The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure (§4.4.7) representing the name of the attribute.
-impl CheckerWithConstantPool for CpUtf8Ref {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-        let cp_info: &CpInfo = constant_pool.get_constant_pool_info(self.value as usize);
-        match cp_info {
-            CpInfo::ConstantUtf8Info { .. } => Ok(()),
-            _ => error("The constant_pool entry at attribute_name_index must be a CONSTANT_Utf8_info structure.".to_string())
+impl CheckerWithConstantPool for CpInfo {
+    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+        match self {
+            CpInfo::ConstantUtf8Info { .. } => {}
+            CpInfo::ConstantIntegerInfo { .. } => {}
+            CpInfo::ConstantFloatInfo { .. } => {}
+            CpInfo::ConstantLongInfo { .. } => {}
+            CpInfo::ConstantDoubleInfo { .. } => {}
+            CpInfo::ConstantClassInfo { tag, name_index } => {
+                // 4.4.1. The CONSTANT_Class_info Structure
+                // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.4.1
+                // > tag
+                // > The tag item has the value CONSTANT_Class (7).
+                if *tag != CONSTANT_CLASS { return error("The tag item has the value CONSTANT_Class (7).".to_string()); }
+                // > name_index
+                // > The value of the name_index item must be a valid index into the constant_pool table.
+                // > The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7)
+                is_constant_utf8_info_entry(*name_index, constant_pool)?;
+            }
+            CpInfo::ConstantStringInfo { .. } => {}
+            CpInfo::ConstantFieldrefInfo { tag, class_index, name_and_type_index } => {
+                // 4.4.2. The CONSTANT_Fieldref_info, CONSTANT_Methodref_info, and CONSTANT_InterfaceMethodref_info Structures
+                // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.4.2
+
+                // > tag
+                // > The tag item of a CONSTANT_Fieldref_info structure has the value CONSTANT_Fieldref (9).
+                if *tag != CONSTANT_FIELDREF { return error("The tag item of a CONSTANT_Fieldref_info structure has the value CONSTANT_Fieldref (9).".to_string()); }
+
+                // > class_index
+                // > The value of the class_index item must be a valid index into the constant_pool table.
+                // > The constant_pool entry at that index must be a CONSTANT_Class_info structure (§4.4.1)
+                // > representing a class or interface type that has the field or method as a member.
+                is_constant_class_info_entry(*class_index, constant_pool)?;
+                // > In a CONSTANT_Fieldref_info structure, the class_index item may be either a class type or an interface type.
+                // QUESTION: Is there a way to confirm this?
+
+                // > name_and_type_index
+                // > The value of the name_and_type_index item must be a valid index into the constant_pool table.
+                // > The constant_pool entry at that index must be a CONSTANT_NameAndType_info structure (§4.4.6).
+                // > This constant_pool entry indicates the name and descriptor of the field or method.
+                is_name_and_type_info_entry(*name_and_type_index, constant_pool)?;
+                // > In a CONSTANT_Fieldref_info structure, the indicated descriptor must be a field descriptor (§4.3.2).
+                match constant_pool.get_constant_pool_info(*name_and_type_index as usize) {
+                    Some(CpInfo::ConstantNameAndTypeInfo { descriptor_index, .. }) => {
+                        match constant_pool.get_constant_pool_info(*descriptor_index as usize) {
+                            Some(CpInfo::ConstantUtf8Info { bytes, .. }) => is_valid_field_descriptor(bytes.to_string())?,
+                            _ => return error("".to_string())
+                        }
+                    }
+                    Some(_) => return error("the constant_pool entry of CONSTANT_Fieldref_info's name_and_type_index must be CONSTANT_NameAndType_info.".to_string()),
+                    _ => return error("missing constant_pool entry of CONSTANT_Fieldref_info's name_and_type_index.".to_string()),
+                }
+            }
+            CpInfo::ConstantMethodrefInfo { tag, class_index, name_and_type_index } => {
+                // 4.4.2. The CONSTANT_Fieldref_info, CONSTANT_Methodref_info, and CONSTANT_InterfaceMethodref_info Structures
+                // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.4.2
+
+                // > tag
+                // > The tag item of a CONSTANT_Methodref_info structure has the value CONSTANT_Methodref (10).
+                if *tag != CONSTANT_METHODREF { return error("The tag item of a CONSTANT_Methodref_info structure has the value CONSTANT_Methodref (10).".to_string()); }
+
+                // > class_index
+                // > The value of the class_index item must be a valid index into the constant_pool table.
+                // > The constant_pool entry at that index must be a CONSTANT_Class_info structure (§4.4.1)
+                // > representing a class or interface type that has the field or method as a member.
+                is_constant_class_info_entry(*class_index, constant_pool)?;
+                // > In a CONSTANT_Methodref_info structure, the class_index item must be a class type, not an interface type.
+                // QUESTION: Is there a way to confirm this?
+
+                // > name_and_type_index
+                // > The value of the name_and_type_index item must be a valid index into the constant_pool table.
+                // > The constant_pool entry at that index must be a CONSTANT_NameAndType_info structure (§4.4.6).
+                // > This constant_pool entry indicates the name and descriptor of the field or method.
+                is_name_and_type_info_entry(*name_and_type_index, constant_pool)?;
+                // > If the name of the method in a CONSTANT_Methodref_info structure begins with a '<' ('\u003c'),
+                // > then the name must be the special name <init>, representing an instance initialization method (§2.9.1).
+                // > The return type of such a method must be void.
+
+                todo!()
+            }
+            CpInfo::ConstantInterfaceMethodrefInfo { .. } => {}
+            CpInfo::ConstantNameAndTypeInfo { .. } => {}
+            CpInfo::ConstantMethodHandleInfo { .. } => {}
+            CpInfo::ConstantMethodTypeInfo { .. } => {}
+            CpInfo::ConstantDynamicInfo { .. } => {}
+            CpInfo::ConstantInvokeDynamicInfo { .. } => {}
+            CpInfo::ConstantModuleInfo { .. } => {}
+            CpInfo::ConstantPackageInfo { .. } => {}
         }
-    }
-}
-
-impl<T: CheckerWithConstantPool> CheckerWithConstantPool for Vec<T> {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-        for t in self {
-            t.check_with_constant_pool(constant_pool)?;
-        }
         Ok(())
     }
 }
 
-// impl CheckerWithConstantPool for CpInfo::ConstantClassInfo {
-//     fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-//         self.name_index.get_constant_pool_info(constant_pool)?;
-//         Ok(())
-//     }
-// }
-
-impl CheckerWithConstantPool for AttributeInfo {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-        self.attribute_name_index.check_with_constant_pool(constant_pool)?;
-        Ok(())
+impl CheckerWithConstantPool for Vec<FieldsInfo> {
+    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.iter().try_for_each(|field| {
+            is_constant_utf8_info_entry(field.name_index, constant_pool)
+        })
     }
 }
 
-impl CheckerWithConstantPool for FieldsInfo {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-        self.name_index.check_with_constant_pool(constant_pool)?;
-        Ok(())
+impl CheckerWithConstantPool for Vec<MethodInfo> {
+    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.iter().try_for_each(|method_info| {
+            is_constant_utf8_info_entry(method_info.name_index, constant_pool)?;
+            method_info.attributes.iter().try_for_each(|attribute| {
+                is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
+            })
+        })
     }
 }
 
-impl CheckerWithConstantPool for CodeAttributeInfo {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-        self.attribute_name_index.check_with_constant_pool(constant_pool)?;
-        Ok(())
-    }
-}
-
-impl CheckerWithConstantPool for MethodInfo {
-    fn check_with_constant_pool(&self, constant_pool: &ConstantPool) -> Result<()> {
-        self.name_index.check_with_constant_pool(constant_pool)?;
-        self.attributes.check_with_constant_pool(constant_pool)?;
-        Ok(())
+impl CheckerWithConstantPool for Vec<AttributeInfo> {
+    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+        self.iter().try_for_each(|attribute| {
+            is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
+        })
     }
 }
 
@@ -129,9 +240,11 @@ impl Checker for ClassFile {
         self.magic.check()?;
         self.version.check()?;
 
-        self.attributes.check_with_constant_pool(&self.constant_pool)?;
-        self.fields.check_with_constant_pool(&self.constant_pool)?;
-        self.methods.check_with_constant_pool(&self.constant_pool)?;
+        self.constant_pool.cp_infos.iter().try_for_each(|cp| cp.check_with(&self.constant_pool))?;
+
+        self.attributes.check_with(&self.constant_pool)?;
+        self.fields.check_with(&self.constant_pool)?;
+        self.methods.check_with(&self.constant_pool)?;
 
         // All predefined attributes (§4.7) must be of the proper length, except for StackMapTable,
         // RuntimeVisibleAnnotations, RuntimeInvisibleAnnotations, RuntimeVisibleParameterAnnotations,
@@ -139,26 +252,7 @@ impl Checker for ClassFile {
         // - TODO
 
         // The class file must not be truncated or have extra bytes at the end.
-        // - This is done with ClassFile::read_from_bytes
-
-        // The constant pool must satisfy the constraints documented throughout §4.4.
-        // - タグの範囲は検証済みである。
-        //
-        // -- ConstantClassInfo の場合、 name_index は以下を満たす
-        // The value of the name_index item must be a valid index into the constant_pool table.
-        // The constant_pool entry at that index must be a CONSTANT_Utf8_info structure (§4.4.7) representing a valid binary class
-        // or interface name encoded in internal form (§4.2.1).
-        let constant_pool_constant_class_info_name_indexes = self.constant_pool.cp_infos.iter()
-            .flat_map(|x| match x {
-                CpInfo::ConstantClassInfo { name_index, .. } => Some(*name_index),
-                _ => None
-            });
-        for constant_pool_constant_class_info_name_index in constant_pool_constant_class_info_name_indexes {
-            match self.constant_pool.get_constant_pool_info(constant_pool_constant_class_info_name_index as usize) {
-                CpInfo::ConstantUtf8Info { tag: CONSTANT_UTF8, .. } => (),
-                _ => panic!("The constant_pool entry at ConstantClassInfo's name_index must be a CONSTANT_Utf8_info structure!")
-            }
-        }
+        // - This is done with Reader::<ClassFile>
 
         // -- ConstantFieldrefInfo, ConstantMethodrefInfo, ConstantInterfaceMethodrefInfo に関して
         // class_index は constant_pool table の有効なインデックスである必要がある。
@@ -180,6 +274,6 @@ impl Checker for ClassFile {
         // All field references and method references in the constant pool must have valid names, valid classes, and valid descriptors (§4.3).
         // -- TODO..
 
-        todo!()
+        Ok(())
     }
 }
