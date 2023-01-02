@@ -19,27 +19,33 @@ pub trait Checker {
 
 // Checking format of some fields requires a ConstantPool reference.
 pub trait CheckerWithConstantPool {
-    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()>;
+    fn check_with(&self, constant_pool: &Vec<CpInfo>) -> Result<()>;
 }
 
-fn is_constant_utf8_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> Result<()> {
-    match constant_pool.get_constant_pool_info(index as usize) {
+// original constant_pool table is indexed from 1 to constant_pool_count - 1.
+// Note that the Vec of this cp_infos structure is indexed from 0.
+pub fn get_constant_pool_info(constant_pool: &Vec<CpInfo>, index: usize) -> Option<&CpInfo> {
+    constant_pool.get(index - 1)
+}
+
+fn is_constant_utf8_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
+    match get_constant_pool_info(constant_pool, index as usize) {
         Some(CpInfo::ConstantUtf8Info { .. }) => Ok(()),
         Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
         _ => error("missing constant_pool entry.".to_string())
     }
 }
 
-fn is_constant_class_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> Result<()> {
-    match constant_pool.get_constant_pool_info(index as usize) {
+fn is_constant_class_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
+    match get_constant_pool_info(constant_pool, index as usize) {
         Some(CpInfo::ConstantClassInfo { .. }) => Ok(()),
         Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
         _ => error("missing constant_pool entry.".to_string())
     }
 }
 
-fn is_name_and_type_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> Result<()> {
-    match constant_pool.get_constant_pool_info(index as usize) {
+fn is_name_and_type_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
+    match get_constant_pool_info(constant_pool, index as usize) {
         Some(CpInfo::ConstantNameAndTypeInfo { .. }) => Ok(()),
         Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
         _ => error("missing constant_pool entry.".to_string())
@@ -48,6 +54,7 @@ fn is_name_and_type_info_entry(index: CpIndex, constant_pool: &ConstantPool) -> 
 
 // 4.2.1. Binary Class and Interface Names
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.2.1
+#[allow(unused_variables)]
 fn is_valid_internal_class_name(bytes: String) -> Result<()> {
     // println!("class name: {}", bytes);
     // todo!()
@@ -65,9 +72,9 @@ fn is_valid_field_descriptor(bytes: String) -> Result<()> {
             tail.to_string().pop();
             let (class_name, last) = tail.split_at(tail.len() - 1);
             is_valid_internal_class_name(class_name.to_string())?;
-            if last != ";" { return error("ObjectType of field descriptor must end with `;`".to_string()) }
+            if last != ";" { return error("ObjectType of field descriptor must end with `;`".to_string()); }
             Ok(())
-        },
+        }
         "[" => is_valid_field_descriptor(tail.to_string()),
         _ => return error("Invalid field descriptor.".to_string())
     }
@@ -82,14 +89,14 @@ fn error<T>(message: String) -> Result<T> {
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
 //
 // > The magic item supplies the magic number identifying the class file format; it has the value 0xCAFEBABE.
-impl Checker for Magic {
-    fn check(&self) -> Result<()> {
-        match self.value {
-            [0xca, 0xfe, 0xba, 0xbe] => Ok(()),
-            _ => error("This is not a class file. The first byte array must be `cafebabe`".to_string())
-        }
-    }
-}
+// impl Checker for Magic {
+//     fn check(&self) -> Result<()> {
+//         match self.value {
+//             [0xca, 0xfe, 0xba, 0xbe] => Ok(()),
+//             _ => error("This is not a class file. The first byte array must be `cafebabe`".to_string())
+//         }
+//     }
+// }
 
 // 4.1. The ClassFile Structure
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
@@ -98,23 +105,23 @@ impl Checker for Magic {
 // Also,
 // > For a class file whose major_version is 56 or above, the minor_version must be 0 or 65535.
 // > For a class file whose major_version is between 45 and 55 inclusive, the minor_version may be any value.
-impl Checker for Version {
-    fn check(&self) -> Result<()> {
-        match (self.major_version, self.minor_version) {
-            (56..=61, 0 | 65535) => Ok(()),
-            (56..=61, _) => error(format!("invalid class file minor version.\
-                The version of this input is major: {}, minor: {}.", self.major_version, self.minor_version)),
-            (45..=61, _) => Ok(()),
-            _ => error(format!(
-                "Not supported class file version. \
-                The version of this input is major: {}, minor: {}.\
-                This JVM is version 17. Class file major versions 45 upto 61 are supported.", self.major_version, self.minor_version))
-        }
-    }
-}
+// impl Checker for Version {
+//     fn check(&self) -> Result<()> {
+//         match (self.major_version, self.minor_version) {
+//             (56..=61, 0 | 65535) => Ok(()),
+//             (56..=61, _) => error(format!("invalid class file minor version.\
+//                 The version of this input is major: {}, minor: {}.", self.major_version, self.minor_version)),
+//             (45..=61, _) => Ok(()),
+//             _ => error(format!(
+//                 "Not supported class file version. \
+//                 The version of this input is major: {}, minor: {}.\
+//                 This JVM is version 17. Class file major versions 45 upto 61 are supported.", self.major_version, self.minor_version))
+//         }
+//     }
+// }
 
 impl CheckerWithConstantPool for CpInfo {
-    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+    fn check_with(&self, constant_pool: &Vec<CpInfo>) -> Result<()> {
         match self {
             CpInfo::ConstantUtf8Info { .. } => {}
             CpInfo::ConstantIntegerInfo { .. } => {}
@@ -155,10 +162,13 @@ impl CheckerWithConstantPool for CpInfo {
                 // > This constant_pool entry indicates the name and descriptor of the field or method.
                 is_name_and_type_info_entry(*name_and_type_index, constant_pool)?;
                 // > In a CONSTANT_Fieldref_info structure, the indicated descriptor must be a field descriptor (§4.3.2).
-                match constant_pool.get_constant_pool_info(*name_and_type_index as usize) {
+                match get_constant_pool_info(constant_pool, *name_and_type_index as usize) {
                     Some(CpInfo::ConstantNameAndTypeInfo { descriptor_index, .. }) => {
-                        match constant_pool.get_constant_pool_info(*descriptor_index as usize) {
-                            Some(CpInfo::ConstantUtf8Info { bytes, .. }) => is_valid_field_descriptor(bytes.to_string())?,
+                        match get_constant_pool_info(constant_pool, *descriptor_index as usize) {
+                            Some(CpInfo::ConstantUtf8Info { bytes, .. }) => {
+                                let str = std::str::from_utf8(bytes).map_err(|e| CheckError { message: e.to_string() })?;
+                                is_valid_field_descriptor(str.to_string())?
+                            }
                             _ => return error("".to_string())
                         }
                     }
@@ -191,7 +201,8 @@ impl CheckerWithConstantPool for CpInfo {
                 // > then the name must be the special name <init>, representing an instance initialization method (§2.9.1).
                 // > The return type of such a method must be void.
 
-                todo!()
+                // todo!()
+                ()
             }
             CpInfo::ConstantInterfaceMethodrefInfo { .. } => {}
             CpInfo::ConstantNameAndTypeInfo { .. } => {}
@@ -207,7 +218,7 @@ impl CheckerWithConstantPool for CpInfo {
 }
 
 impl CheckerWithConstantPool for Vec<FieldsInfo> {
-    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+    fn check_with(&self, constant_pool: &Vec<CpInfo>) -> Result<()> {
         self.iter().try_for_each(|field| {
             is_constant_utf8_info_entry(field.name_index, constant_pool)
         })
@@ -215,7 +226,7 @@ impl CheckerWithConstantPool for Vec<FieldsInfo> {
 }
 
 impl CheckerWithConstantPool for Vec<MethodInfo> {
-    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+    fn check_with(&self, constant_pool: &Vec<CpInfo>) -> Result<()> {
         self.iter().try_for_each(|method_info| {
             is_constant_utf8_info_entry(method_info.name_index, constant_pool)?;
             method_info.attributes.iter().try_for_each(|attribute| {
@@ -226,7 +237,7 @@ impl CheckerWithConstantPool for Vec<MethodInfo> {
 }
 
 impl CheckerWithConstantPool for Vec<AttributeInfo> {
-    fn check_with(&self, constant_pool: &ConstantPool) -> Result<()> {
+    fn check_with(&self, constant_pool: &Vec<CpInfo>) -> Result<()> {
         self.iter().try_for_each(|attribute| {
             is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
         })
@@ -237,10 +248,10 @@ impl CheckerWithConstantPool for Vec<AttributeInfo> {
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.8
 impl Checker for ClassFile {
     fn check(&self) -> Result<()> {
-        self.magic.check()?;
-        self.version.check()?;
+        // self.magic.check()?;
+        // self.version.check()?;
 
-        self.constant_pool.cp_infos.iter().try_for_each(|cp| cp.check_with(&self.constant_pool))?;
+        self.constant_pool.iter().try_for_each(|cp| cp.check_with(&self.constant_pool))?;
 
         self.attributes.check_with(&self.constant_pool)?;
         self.fields.check_with(&self.constant_pool)?;

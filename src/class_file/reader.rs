@@ -1,12 +1,9 @@
 use super::raw_structure::*;
-use super::checker::Checker;
 
 use thiserror::Error;
 
 pub fn read_class_file(bytes: &[u8]) -> Result<ClassFile> {
-    let mut offset: usize = 0;
-
-    let class_file: ClassFile = Reader::read(&bytes, &mut offset)?;
+    let class_file: ClassFile = Reader::read(&bytes, &mut (0 as usize))?;
     Ok(class_file)
 }
 
@@ -75,73 +72,48 @@ impl<T> VecReader for T where T: Reader {
     }
 }
 
-struct StringReader {}
-
-impl StringReader {
-    fn read(bytes: &[u8], offset: &mut usize, num_of_bytes: usize) -> Result<String> {
-        let vec: Vec<u8> = VecReader::read(&bytes, offset, num_of_bytes)?;
-        std::str::from_utf8(&*vec)
-            .map(|str| str.to_string())
-            .map_err(|e| ReadError { message: e.to_string(), offset: offset.clone() })
-    }
-}
-
 // utils
 fn error<T>(message: String, offset: &mut usize) -> Result<T> {
     Err(ReadError { message, offset: offset.clone() })
 }
 
-impl Reader for Magic {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
-        let value: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
-        Ok(Magic { value })
-    }
-}
-
-impl Reader for Version {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized {
-        let minor_version: u16 = Reader::read(&bytes, &mut *offset)?;
-        let major_version: u16 = Reader::read(&bytes, &mut *offset)?;
-        Ok(Version { minor_version, major_version })
-    }
-}
-
 impl Reader for ClassFile {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ClassFile> {
-        let magic: Magic = Reader::read(&bytes, &mut *offset)?;
-
+        let magic: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
         // check the magic item `cafebabe` at the first early.
-        magic.check().map_err(|e| ReadError { message: e.message, offset: offset.clone() })?;
-
-        let version: Version = Reader::read(&bytes, &mut *offset)?;
+        match magic {
+            [0xca, 0xfe, 0xba, 0xbe] => (),
+            _ => return error("This is not a class file. The first byte array must be `cafebabe`".to_string(), offset)
+        }
+        let minor_version: u16 = Reader::read(&bytes, &mut *offset)?;
+        let major_version: u16 = Reader::read(&bytes, &mut *offset)?;
         // check the class file version early.
-        version.check().map_err(|e| ReadError { message: e.message, offset: offset.clone() })?;
-
+        match (major_version, minor_version) {
+            (56..=61, 0 | 65535) => (),
+            (56..=61, _) => return error(format!("invalid class file minor version.\
+                The version of this input is major: {}, minor: {}.", major_version, minor_version), offset),
+            (45..=61, _) => (),
+            _ => return error(format!(
+                "Not supported class file version. \
+                The version of this input is major: {}, minor: {}.\
+                This JVM is version 17. Class file major versions 45 upto 61 are supported.", major_version, minor_version), offset)
+        }
         // The rest of the checking done by the class file reader is only checking
         // whether all the bytes at the end have been consumed, and the rest is left to ClassFileChecker
-
-        let constant_pool: ConstantPool = Reader::read(&bytes, &mut *offset)?;
-
+        let constant_pool_count: u16 = Reader::read(&bytes, &mut *offset)?;
+        // The constant_pool table is indexed from 1 to constant_pool_count - 1.
+        // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
+        let constant_pool: Vec<CpInfo> = VecReader::read(&bytes, &mut *offset, (constant_pool_count - 1) as usize)?;
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let this_class: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let super_class: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let interfaces_count: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let interfaces: Vec<u16> = VecReader::read(&bytes, &mut *offset, interfaces_count as usize)?;
-
         let fields_count: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let fields: Vec<FieldsInfo> = VecReader::read(&bytes, &mut *offset, fields_count as usize)?;
-
         let methods_count: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let methods: Vec<MethodInfo> = VecReader::read(&bytes, &mut *offset, methods_count as usize)?;
-
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-
         let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
 
         // 4.8. Format Checking
@@ -152,7 +124,9 @@ impl Reader for ClassFile {
 
         Ok(ClassFile {
             magic,
-            version,
+            minor_version,
+            major_version,
+            constant_pool_count,
             constant_pool,
             access_flags,
             this_class,
@@ -169,19 +143,6 @@ impl Reader for ClassFile {
     }
 }
 
-impl Reader for ConstantPool {
-    fn read(bytes: &[u8], offset: &mut usize) -> Result<ConstantPool> {
-        let constant_pool_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        // The constant_pool table is indexed from 1 to constant_pool_count - 1.
-        // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
-        let cp_infos: Vec<CpInfo> = VecReader::read(&bytes, &mut *offset, (constant_pool_count - 1) as usize)?;
-        Ok(ConstantPool {
-            constant_pool_count,
-            cp_infos,
-        })
-    }
-}
-
 impl Reader for CpInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<CpInfo> {
         let tag: CpInfoTag = Reader::read(&bytes, &mut *offset)?;
@@ -191,7 +152,7 @@ impl Reader for CpInfo {
                 CpInfo::ConstantUtf8Info {
                     tag,
                     length,
-                    bytes: StringReader::read(&bytes, &mut *offset, length as usize)?,
+                    bytes: VecReader::read(&bytes, &mut *offset, length as usize)?,
                 }
             }
             CONSTANT_INTEGER => {
@@ -308,7 +269,7 @@ impl Reader for CpInfo {
 impl Reader for FieldsInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<FieldsInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
+        let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
@@ -325,7 +286,7 @@ impl Reader for FieldsInfo {
 impl Reader for MethodInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<MethodInfo> {
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
+        let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<CodeAttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
@@ -341,7 +302,7 @@ impl Reader for MethodInfo {
 
 impl Reader for AttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<AttributeInfo> {
-        let attribute_name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let info: Vec<u8> = VecReader::read(&bytes, &mut *offset, attribute_length as usize)?;
         Ok(AttributeInfo {
@@ -354,7 +315,7 @@ impl Reader for AttributeInfo {
 
 impl Reader for CodeAttributeInfo {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<CodeAttributeInfo> {
-        let attribute_name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let max_stack: u16 = Reader::read(&bytes, &mut *offset)?;
         let max_locals: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -383,7 +344,7 @@ impl Reader for CodeAttributeInfo {
 #[allow(dead_code)]
 impl Reader for StackMapTableAttribute {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<StackMapTableAttribute> {
-        let attribute_name_index: CpIndex = Reader::read(&bytes, &mut *offset)?;
+        let attribute_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attribute_length: u32 = Reader::read(&bytes, &mut *offset)?;
         let number_of_entries: u16 = Reader::read(&bytes, &mut *offset)?;
         let entries: Vec<StackMapFrame> = VecReader::read(&bytes, &mut *offset, number_of_entries as usize)?;

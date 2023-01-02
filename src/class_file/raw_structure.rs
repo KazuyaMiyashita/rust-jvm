@@ -2,12 +2,11 @@
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
 #[derive(Debug, PartialEq)]
 pub struct ClassFile {
-    pub magic: Magic,
-    // The original fields minor_version, major_version are in the version structure below.
-    pub version: Version,
-    // The original fields constant_pool_count, constant_pool are in the constant_pool structure below,
-    // and the original constant_pool has been renamed to cp_infos.
-    pub constant_pool: ConstantPool,
+    pub magic: [u8; 4],
+    pub minor_version: u16,
+    pub major_version: u16,
+    pub constant_pool_count: u16,
+    pub constant_pool: Vec<CpInfo>,
     pub access_flags: u16,
     pub this_class: u16,
     pub super_class: u16,
@@ -21,17 +20,6 @@ pub struct ClassFile {
     pub attributes: Vec<AttributeInfo>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Magic {
-    pub value: [u8; 4],
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Version {
-    pub minor_version: u16,
-    pub major_version: u16,
-}
-
 // 4.4. The Constant Pool
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.4
 #[derive(Debug, PartialEq)]
@@ -40,16 +28,7 @@ pub struct ConstantPool {
     pub cp_infos: Vec<CpInfo>,
 }
 
-impl ConstantPool {
-    // original constant_pool table is indexed from 1 to constant_pool_count - 1.
-    // Note that the Vec of this cp_infos structure is indexed from 0.
-    pub fn get_constant_pool_info(&self, index: usize) -> Option<&CpInfo> {
-        self.cp_infos.get(index - 1)
-    }
-}
-
 pub type CpInfoTag = u8;
-pub type CpIndex = u16;
 
 pub const CONSTANT_UTF8: CpInfoTag = 1;
 pub const CONSTANT_INTEGER: CpInfoTag = 3;
@@ -74,7 +53,7 @@ pub enum CpInfo {
     ConstantUtf8Info {
         tag: CpInfoTag,
         length: u16,
-        bytes: String,
+        bytes: Vec<u8>,
     },
     ConstantIntegerInfo {
         tag: CpInfoTag,
@@ -96,7 +75,7 @@ pub enum CpInfo {
     },
     ConstantClassInfo {
         tag: CpInfoTag,
-        name_index: CpIndex,
+        name_index: u16,
     },
     ConstantStringInfo {
         tag: CpInfoTag,
@@ -104,22 +83,22 @@ pub enum CpInfo {
     },
     ConstantFieldrefInfo {
         tag: CpInfoTag,
-        class_index: CpIndex,
-        name_and_type_index: CpIndex,
+        class_index: u16,
+        name_and_type_index: u16,
     },
     ConstantMethodrefInfo {
         tag: CpInfoTag,
-        class_index: CpIndex,
-        name_and_type_index: CpIndex,
+        class_index: u16,
+        name_and_type_index: u16,
     },
     ConstantInterfaceMethodrefInfo {
         tag: CpInfoTag,
-        class_index: CpIndex,
-        name_and_type_index: CpIndex,
+        class_index: u16,
+        name_and_type_index: u16,
     },
     ConstantNameAndTypeInfo {
         tag: CpInfoTag,
-        name_index: CpIndex,
+        name_index: u16,
         descriptor_index: u16,
     },
     ConstantMethodHandleInfo {
@@ -154,7 +133,7 @@ pub enum CpInfo {
 #[derive(Debug, PartialEq)]
 pub struct FieldsInfo {
     pub access_flags: u16,
-    pub name_index: CpIndex,
+    pub name_index: u16,
     pub descriptor_index: u16,
     pub attributes_count: u16,
     pub attributes: Vec<AttributeInfo>,
@@ -163,7 +142,7 @@ pub struct FieldsInfo {
 #[derive(Debug, PartialEq)]
 pub struct MethodInfo {
     pub access_flags: u16,
-    pub name_index: CpIndex,
+    pub name_index: u16,
     pub descriptor_index: u16,
     pub attributes_count: u16,
     pub attributes: Vec<CodeAttributeInfo>,
@@ -172,7 +151,7 @@ pub struct MethodInfo {
 
 #[derive(Debug, PartialEq)]
 pub struct AttributeInfo {
-    pub attribute_name_index: CpIndex,
+    pub attribute_name_index: u16,
     pub attribute_length: u32,
     pub info: Vec<u8>,
 }
@@ -182,7 +161,7 @@ pub struct AttributeInfo {
 // The Code attribute is a variable-length attribute in the attributes table of a method_info structure
 #[derive(Debug, PartialEq)]
 pub struct CodeAttributeInfo {
-    pub attribute_name_index: CpIndex,
+    pub attribute_name_index: u16,
     pub attribute_length: u32,
     pub max_stack: u16,
     pub max_locals: u16,
@@ -201,7 +180,7 @@ pub struct CodeAttributeInfo {
 #[derive(Debug, PartialEq)]
 #[allow(dead_code)]
 pub struct StackMapTableAttribute {
-    pub attribute_name_index: CpIndex,
+    pub attribute_name_index: u16,
     pub attribute_length: u32,
     pub number_of_entries: u16,
     pub entries: Vec<StackMapFrame>,

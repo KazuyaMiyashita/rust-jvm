@@ -109,18 +109,10 @@ pub enum FieldType {
     Float,
     Int,
     Long,
-    Class { value: ClassName },
+    Class { name: String }, // leading `L` and trailing `;` are removed.
     Short,
     Boolean,
     Array { value: Box<FieldType> },
-}
-
-// Java Language Specification 13.1. The Form of a Binary
-// https://docs.oracle.com/javase/specs/jls/se17/html/jls-13.html#jls-13.1
-// ... TODO
-#[derive(Debug, PartialEq)]
-pub struct ClassName {
-    value: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -131,8 +123,13 @@ pub enum ReturnType {
 
 peg::parser! {
     grammar descriptor_parser() for str {
-        pub rule class_name() -> ClassName
-            = str:$(['a'..='z' | 'A'..='Z' | '/']+) { ClassName { value: str.to_string() } } // FIXME クラス名としてOKなのはなに？
+        // not strict.
+        // see below for class names
+        // https://docs.oracle.com/javase/specs/jls/se17/html/jls-8.html#jls-8.1
+        // and see below for internal form of class name
+        // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.2.1
+        pub rule class_name() -> String
+            = str:$(['a'..='z' | 'A'..='Z' | '/' | '$' | '_'] ['a'..='z' | 'A'..='Z' | '/' | '$' | '_' | '0'..='9']*) { str.to_string() }
 
         pub rule field_type() -> FieldType
             = "B" { FieldType::Byte } /
@@ -141,7 +138,7 @@ peg::parser! {
               "F" { FieldType::Float } /
               "I" { FieldType::Int } /
               "J" { FieldType::Long } /
-              "L" cn:class_name() ";" { FieldType::Class { value: cn } } /
+              "L" str:class_name() ";" { FieldType::Class { name: str } } /
               "S" { FieldType::Char } /
               "Z" { FieldType::Boolean } /
               "[" ft:field_type() { FieldType::Array { value: Box::new(ft)} }
@@ -171,7 +168,7 @@ fn test_parse_field_type() {
     );
     assert_eq!(
         parse_field_type("Ljava/lang/String;"),
-        Ok(FieldType::Class { value: ClassName { value: "java/lang/String".to_string() } })
+        Ok(FieldType::Class { name: "java/lang/String".to_string() } )
     );
     assert_eq!(
         parse_field_type("[[[D"),
@@ -191,16 +188,16 @@ fn test_parse_method_descriptor() {
             parameter_types: vec![
                 FieldType::Int,
                 FieldType::Double,
-                FieldType::Class { value: ClassName { value: "java/lang/Thread".to_string() } }
+                FieldType::Class { name: "java/lang/Thread".to_string() }
             ],
-            return_type: ReturnType::Field { value: FieldType::Class { value: ClassName { value: "java/lang/Object".to_string() } } },
+            return_type: ReturnType::Field { value: FieldType::Class { name: "java/lang/Object".to_string() } } ,
         })
     );
     assert_eq!(
         parse_method_descriptor("(Ljava/lang/String;I)V"),
         Ok(MethodType {
             parameter_types: vec![
-                FieldType::Class { value: ClassName { value: "java/lang/String".to_string() } },
+                FieldType::Class { name: "java/lang/String".to_string() } ,
                 FieldType::Int
             ],
             return_type: ReturnType::Void,
