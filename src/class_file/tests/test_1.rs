@@ -1,4 +1,4 @@
-use crate::class_file::structure::*;
+use crate::class_file::raw_structure::*;
 use crate::class_file::reader::read_class_file;
 use crate::class_file::checker::check_class_file;
 

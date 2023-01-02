@@ -1,4 +1,4 @@
-use super::structure::*;
+use super::raw_structure::*;
 use thiserror::Error;
 
 pub fn check_class_file(class_file: ClassFile) -> Result<()> {

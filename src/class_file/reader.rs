@@ -1,4 +1,4 @@
-use super::structure::*;
+use super::raw_structure::*;
 use super::checker::Checker;
 
 use thiserror::Error;
