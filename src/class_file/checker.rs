@@ -1,4 +1,5 @@
 use super::structure::*;
+#[allow(unused)]
 use super::descriptor::{MethodType, ReturnType, parse_field_type, parse_method_descriptor};
 use thiserror::Error;
 
@@ -115,21 +116,22 @@ fn check_each_cp<'a>(index: usize, constant_pool: &'a Vec<CpInfo>, is_validated:
                 _ => return error("The class_index must refer to CONSTANT_Class_info structure.".to_string())
             }
             let name_and_type = check_each_cp(*name_and_type_index as usize, constant_pool, is_validated)?;
-            let (name_index, descriptor_index) = match name_and_type {
+            let (_name_index, _descriptor_index) = match name_and_type {
                 CpInfo::ConstantNameAndTypeInfo { name_index, descriptor_index, .. } => (name_index, descriptor_index),
                 _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
             };
-            let name = get_cp_utf8_string(*name_index as usize, constant_pool, is_validated)?; // WIPWIPWIP
-            let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
-
-            if name.starts_with('<') {
-                if name != "<init>" { return error("A special method name <init> is expected, but not.".to_string()); }
-                match parse_method_descriptor(&descriptor) {
-                    Ok(MethodType { return_type, ..}) if return_type == ReturnType::Void => (),
-                    Ok(_)  => return error("return type of <init> must be void.".to_string()),
-                    Err(e) => return error(e)
-                }
-            }
+            // let name = get_cp_utf8_string(*name_index as usize, constant_pool, is_validated)?; // WIPWIPWIP
+            // let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
+            //
+            // if name.starts_with('<') {
+            //     if name != "<init>" { return error("A special method name <init> is expected, but not.".to_string()); }
+            //     match parse_method_descriptor(&descriptor) {
+            //         Ok(MethodType { return_type, ..}) if return_type == ReturnType::Void => (),
+            //         Ok(_)  => return error("return type of <init> must be void.".to_string()),
+            //         Err(e) => return error(e)
+            //     }
+            // }
+            todo!()
         }
         CpInfo::ConstantInterfaceMethodrefInfo { tag, class_index, name_and_type_index } => {
             if *tag != CONSTANT_INTERFACE_METHODREF { return error("The tag item of a CONSTANT_InterfaceMethodref_info structure has the value CONSTANT_InterfaceMethodref (11).".to_string()); }
@@ -224,9 +226,9 @@ fn check_attributes(attributes: &Vec<AttributeInfo>, constant_pool: &Vec<CpInfo>
 // 4.8. Format Checking
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.8
 pub fn check_class_file(class_file: &ClassFile) -> Result<()> {
-    let version = check_version(class_file.minor_version, class_file.major_version)?;
+    let _version = check_version(class_file.minor_version, class_file.major_version)?;
 
-    let constant_pool = check_constant_pool(&class_file.constant_pool)?;
+    let _constant_pool = check_constant_pool(&class_file.constant_pool)?;
 
     check_attributes(&class_file.attributes, &class_file.constant_pool)?;
     check_fields(&class_file.fields, &class_file.constant_pool)?;
