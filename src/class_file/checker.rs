@@ -10,12 +10,6 @@ pub struct CheckError {
     pub message: String,
 }
 
-trait CP {}
-
-struct CLa {}
-
-impl CP for CLa {}
-
 // utils
 fn error<T>(message: String) -> Result<T> {
     Err(CheckError { message })
@@ -32,22 +26,6 @@ fn get_constant_pool_info(constant_pool: &Vec<CpInfo>, index: usize) -> Option<&
 fn is_constant_utf8_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
     match get_constant_pool_info(constant_pool, index as usize) {
         Some(CpInfo::ConstantUtf8Info { .. }) => Ok(()),
-        Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
-        _ => error("missing constant_pool entry.".to_string())
-    }
-}
-
-fn is_constant_class_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
-    match get_constant_pool_info(constant_pool, index as usize) {
-        Some(CpInfo::ConstantClassInfo { .. }) => Ok(()),
-        Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
-        _ => error("missing constant_pool entry.".to_string())
-    }
-}
-
-fn is_name_and_type_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
-    match get_constant_pool_info(constant_pool, index as usize) {
-        Some(CpInfo::ConstantNameAndTypeInfo { .. }) => Ok(()),
         Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
         _ => error("missing constant_pool entry.".to_string())
     }
@@ -106,7 +84,14 @@ fn check_each_cp<'a>(index: usize, constant_pool: &'a Vec<CpInfo>, is_validated:
                 _ => return error("The name_index must refer to CONSTANT_Utf8_info structure.".to_string())
             }
         }
-        CpInfo::ConstantStringInfo { .. } => { todo!() }
+        CpInfo::ConstantStringInfo { tag, string_index } => {
+            if *tag != CONSTANT_STRING { return error("The tag item has the value CONSTANT_String (8).".to_string()); }
+            let string = check_each_cp(*string_index as usize, constant_pool, is_validated)?;
+            match string {
+                CpInfo::ConstantUtf8Info { .. } => (),
+                _ => return error("The string_index must refer to CONSTANT_Utf8_info structure.".to_string())?
+            }
+        }
         CpInfo::ConstantFieldrefInfo { tag, class_index, name_and_type_index } => {
             if *tag != CONSTANT_FIELDREF { return error("The tag item of a CONSTANT_Fieldref_info structure has the value CONSTANT_Fieldref (9).".to_string()); }
             let class = check_each_cp(*class_index as usize, constant_pool, is_validated)?;
@@ -145,15 +130,22 @@ fn check_each_cp<'a>(index: usize, constant_pool: &'a Vec<CpInfo>, is_validated:
                     Err(e) => return error(e)
                 }
             }
-
-
-            // > If the name of the method in a CONSTANT_Methodref_info structure begins with a '<' ('\u003c'),
-            // > then the name must be the special name <init>, representing an instance initialization method (§2.9.1).
-            // > The return type of such a method must be void.
-
-            todo!()
         }
-        CpInfo::ConstantInterfaceMethodrefInfo { .. } => { todo!() }
+        CpInfo::ConstantInterfaceMethodrefInfo { tag, class_index, name_and_type_index } => {
+            if *tag != CONSTANT_INTERFACE_METHODREF { return error("The tag item of a CONSTANT_InterfaceMethodref_info structure has the value CONSTANT_InterfaceMethodref (11).".to_string()); }
+            let class = check_each_cp(*class_index as usize, constant_pool, is_validated)?;
+            match class {
+                CpInfo::ConstantClassInfo { .. } => (),
+                _ => return error("The class_index must refer to CONSTANT_Class_info structure.".to_string())
+            }
+            let name_and_type = check_each_cp(*name_and_type_index as usize, constant_pool, is_validated)?;
+            let descriptor_index = match name_and_type {
+                CpInfo::ConstantNameAndTypeInfo { descriptor_index, .. } => descriptor_index,
+                _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
+            };
+            let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
+            parse_field_type(&descriptor).or_else(|e| error(e))?;
+        }
         CpInfo::ConstantNameAndTypeInfo { .. } => { todo!() }
         CpInfo::ConstantMethodHandleInfo { .. } => { todo!() }
         CpInfo::ConstantMethodTypeInfo { .. } => { todo!() }
