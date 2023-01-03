@@ -1,5 +1,5 @@
 pub mod structure;
-pub mod shaped_structure;
+pub mod descriptor;
 pub mod reader;
 pub mod checker;
 
