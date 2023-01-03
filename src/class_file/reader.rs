@@ -1,4 +1,5 @@
-use super::raw_structure::*;
+use super::structure::*;
+use super::checker::{check_magic, check_version};
 
 use thiserror::Error;
 
@@ -81,23 +82,11 @@ impl Reader for ClassFile {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ClassFile> {
         let magic: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
         // check the magic item `cafebabe` at the first early.
-        match magic {
-            [0xca, 0xfe, 0xba, 0xbe] => (),
-            _ => return error("This is not a class file. The first byte array must be `cafebabe`".to_string(), offset)
-        }
+        check_magic(&magic).or_else(|e| error(e.message, offset))?;
         let minor_version: u16 = Reader::read(&bytes, &mut *offset)?;
         let major_version: u16 = Reader::read(&bytes, &mut *offset)?;
         // check the class file version early.
-        match (major_version, minor_version) {
-            (56..=61, 0 | 65535) => (),
-            (56..=61, _) => return error(format!("invalid class file minor version.\
-                The version of this input is major: {}, minor: {}.", major_version, minor_version), offset),
-            (45..=61, _) => (),
-            _ => return error(format!(
-                "Not supported class file version. \
-                The version of this input is major: {}, minor: {}.\
-                This JVM is version 17. Class file major versions 45 upto 61 are supported.", major_version, minor_version), offset)
-        }
+        check_version(minor_version, major_version).or_else(|e| error(e.message, offset))?;
         // The rest of the checking done by the class file reader is only checking
         // whether all the bytes at the end have been consumed, and the rest is left to ClassFileChecker
         let constant_pool_count: u16 = Reader::read(&bytes, &mut *offset)?;
