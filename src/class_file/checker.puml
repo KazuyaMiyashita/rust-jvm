@@ -1,0 +1,148 @@
+@startuml
+
+package ConstantPool {
+
+    map CONSTANT_Utf8_info {
+        tag => u1
+        length => u2
+        bytes => u1[length]
+    }
+
+    map CONSTANT_Class_info {
+        tag => u1
+        name_index => u2
+    }
+    CONSTANT_Class_info::name_index --> CONSTANT_Utf8_info
+
+    map CONSTANT_NameAndType_info {
+        tag => u1
+        name_index => u2
+        descriptor_index => u2
+    }
+    CONSTANT_NameAndType_info::name_index --> CONSTANT_Utf8_info
+    CONSTANT_NameAndType_info::descriptor_index --> CONSTANT_Utf8_info
+
+    map CONSTANT_Fieldref_info {
+        tag => u1
+        class_index => u2
+        name_and_type_index => u2
+    }
+    CONSTANT_Fieldref_info::class_index --> CONSTANT_Class_info
+    CONSTANT_Fieldref_info::name_and_type_index --> CONSTANT_NameAndType_info
+    'note top of CONSTANT_Fieldref_info
+    'the class_index item may be either a class type or an interface type.
+    'This constant_pool entry indicates the name and descriptor of the field or method.
+    'end note
+
+    map CONSTANT_Methodref_info {
+        tag => u1
+        class_index => u2
+        name_and_type_index => u2
+    }
+    CONSTANT_Methodref_info::class_index --> CONSTANT_Class_info
+    CONSTANT_Methodref_info::name_and_type_index --> CONSTANT_NameAndType_info
+    'note top of CONSTANT_Methodref_info
+    'the class_index item must be a class type, not an interface type.
+    'the indicated descriptor must be a field descriptor (§4.3.2).
+    'Otherwise, the indicated descriptor must be a method descriptor (§4.3.3).
+    'end note
+
+    map CONSTANT_InterfaceMethodref_info {
+        tag => u1
+        class_index => u2
+        name_and_type_index => u2
+    }
+    CONSTANT_InterfaceMethodref_info::class_index --> CONSTANT_Class_info
+    CONSTANT_InterfaceMethodref_info::name_and_type_index --> CONSTANT_NameAndType_info
+    'note top of CONSTANT_InterfaceMethodref_info
+    'the class_index item must be an interface type, not a class type.
+    'If the name of the method in a CONSTANT_Methodref_info structure begins with a '<' ('\u003c'),
+    'then the name must be the special name <init>, representing an instance initialization method (§2.9.1).
+    'The return type of such a method must be void" as N_CONSTANT_InterfaceMethodref_info
+    'end note
+
+    map CONSTANT_String_info {
+        tag => u1
+        string_index => u2
+    }
+    CONSTANT_String_info::string_index --> CONSTANT_Utf8_info
+    'note top of CONSTANT_String_info
+    'end note
+
+    map CONSTANT_Integer_info {
+        tag => u1
+        bytes => u4
+    }
+    'note top of CONSTANT_Integer_info
+    'it represents the value of the int constant. The bytes of the value are stored in big-endian (high byte first) order.
+    'end note
+
+    map CONSTANT_Float_info {
+        tag => u1
+        bytes => u4
+    }
+
+    map CONSTANT_Long_info {
+        tag => u1
+        high_bytes => u4
+        low_bytes => u4
+    }
+
+    map CONSTANT_Double_info {
+        tag => u1
+        high_bytes => u4
+        low_bytes => u4
+    }
+
+    map CONSTANT_MethodHandle_info {
+        tag => u1
+        reference_kind => u1
+        reference_index => u2
+    }
+    CONSTANT_MethodHandle_info::reference_index ..> CONSTANT_Fieldref_info
+    CONSTANT_MethodHandle_info::reference_index ..> CONSTANT_Methodref_info
+    CONSTANT_MethodHandle_info::reference_index ..> CONSTANT_InterfaceMethodref_info
+
+    map CONSTANT_MethodType_info {
+        tag => u1
+        descriptor_index => u2
+    }
+    CONSTANT_MethodType_info::descriptor_index --> CONSTANT_Utf8_info
+
+    map CONSTANT_Dynamic_info {
+        tag => u1
+        bootstrap_method_attr_index => u2
+        name_and_type_index => u2
+    }
+    CONSTANT_Dynamic_info::bootstrap_method_attr_index --> BootstrapMethods.BootstrapMethodsAttribute
+    CONSTANT_Dynamic_info::name_and_type_index --> CONSTANT_NameAndType_info
+
+    map CONSTANT_InvokeDynamic_info {
+        tag => u1
+        bootstrap_method_attr_index => u2
+        name_and_type_index => u2
+    }
+    CONSTANT_InvokeDynamic_info::bootstrap_method_attr_index --> BootstrapMethods.BootstrapMethodsAttribute
+    CONSTANT_InvokeDynamic_info::name_and_type_index --> CONSTANT_NameAndType_info
+
+    map CONSTANT_Module_info {
+        tag => u1
+        name_index => u2
+    }
+    CONSTANT_Module_info::name_index --> CONSTANT_Utf8_info
+
+    map CONSTANT_Package_info {
+        tag => u1
+        name_index => u2
+    }
+    CONSTANT_Package_info::name_index --> CONSTANT_Utf8_info
+
+}
+
+package BootstrapMethods {
+    object BootstrapMethodsAttribute {
+
+    }
+}
+
+@enduml
