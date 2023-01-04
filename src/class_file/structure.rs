@@ -49,85 +49,136 @@ pub const CONSTANT_MODULE: CpInfoTag = 19;
 pub const CONSTANT_PACKAGE: CpInfoTag = 20;
 
 #[derive(Debug, PartialEq)]
+pub struct ConstantUtf8Info {
+    pub tag: CpInfoTag,
+    pub length: u16,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantIntegerInfo {
+    pub tag: CpInfoTag,
+    pub bytes: u32,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantFloatInfo {
+    pub tag: CpInfoTag,
+    pub bytes: u32,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantLongInfo {
+    pub tag: CpInfoTag,
+    pub high_bytes: u32,
+    pub low_bytes: u32,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantDoubleInfo {
+    pub tag: CpInfoTag,
+    pub high_bytes: u32,
+    pub low_bytes: u32,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantClassInfo {
+    pub tag: CpInfoTag,
+    pub name_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantStringInfo {
+    pub tag: CpInfoTag,
+    pub string_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantFieldrefInfo {
+    pub tag: CpInfoTag,
+    pub class_index: u16,
+    pub name_and_type_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantMethodrefInfo {
+    pub tag: CpInfoTag,
+    pub class_index: u16,
+    pub name_and_type_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantInterfaceMethodrefInfo {
+    pub tag: CpInfoTag,
+    pub class_index: u16,
+    pub name_and_type_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantNameAndTypeInfo {
+    pub tag: CpInfoTag,
+    pub name_index: u16,
+    pub descriptor_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantMethodHandleInfo {
+    pub tag: CpInfoTag,
+    pub reference_kind: u8,
+    pub reference_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantMethodTypeInfo {
+    pub tag: CpInfoTag,
+    pub descriptor_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantDynamicInfo {
+    pub tag: CpInfoTag,
+    pub bootstrap_method_attr_index: u16,
+    pub name_and_type_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantInvokeDynamicInfo {
+    pub tag: CpInfoTag,
+    pub bootstrap_method_attr_index: u16,
+    pub name_and_type_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantModuleInfo {
+    pub tag: CpInfoTag,
+    pub name_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantPackageInfo {
+    pub tag: CpInfoTag,
+    pub name_index: u16,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum CpInfo {
-    ConstantUtf8Info {
-        tag: CpInfoTag,
-        length: u16,
-        bytes: Vec<u8>,
-    },
-    ConstantIntegerInfo {
-        tag: CpInfoTag,
-        bytes: u32,
-    },
-    ConstantFloatInfo {
-        tag: CpInfoTag,
-        bytes: u32,
-    },
-    ConstantLongInfo {
-        tag: CpInfoTag,
-        high_bytes: u32,
-        low_bytes: u32,
-    },
-    ConstantDoubleInfo {
-        tag: CpInfoTag,
-        high_bytes: u32,
-        low_bytes: u32,
-    },
-    ConstantClassInfo {
-        tag: CpInfoTag,
-        name_index: u16,
-    },
-    ConstantStringInfo {
-        tag: CpInfoTag,
-        string_index: u16,
-    },
-    ConstantFieldrefInfo {
-        tag: CpInfoTag,
-        class_index: u16,
-        name_and_type_index: u16,
-    },
-    ConstantMethodrefInfo {
-        tag: CpInfoTag,
-        class_index: u16,
-        name_and_type_index: u16,
-    },
-    ConstantInterfaceMethodrefInfo {
-        tag: CpInfoTag,
-        class_index: u16,
-        name_and_type_index: u16,
-    },
-    ConstantNameAndTypeInfo {
-        tag: CpInfoTag,
-        name_index: u16,
-        descriptor_index: u16,
-    },
-    ConstantMethodHandleInfo {
-        tag: CpInfoTag,
-        reference_kind: u8,
-        reference_index: u16,
-    },
-    ConstantMethodTypeInfo {
-        tag: CpInfoTag,
-        descriptor_index: u16,
-    },
-    ConstantDynamicInfo {
-        tag: CpInfoTag,
-        bootstrap_method_attr_index: u16,
-        name_and_type_index: u16,
-    },
-    ConstantInvokeDynamicInfo {
-        tag: CpInfoTag,
-        bootstrap_method_attr_index: u16,
-        name_and_type_index: u16,
-    },
-    ConstantModuleInfo {
-        tag: CpInfoTag,
-        name_index: u16,
-    },
-    ConstantPackageInfo {
-        tag: CpInfoTag,
-        name_index: u16,
-    },
+    Utf8(ConstantUtf8Info),
+    Integer(ConstantIntegerInfo),
+    Float(ConstantFloatInfo),
+    Long(ConstantLongInfo),
+    Double(ConstantDoubleInfo),
+    Class(ConstantClassInfo),
+    String(ConstantStringInfo),
+    Fieldref(ConstantFieldrefInfo),
+    Methodref(ConstantMethodrefInfo),
+    InterfaceMethodref(ConstantInterfaceMethodrefInfo),
+    NameAndType(ConstantNameAndTypeInfo),
+    MethodHandle(ConstantMethodHandleInfo),
+    MethodType(ConstantMethodTypeInfo),
+    Dynamic(ConstantDynamicInfo),
+    InvokeDynamic(ConstantInvokeDynamicInfo),
+    Module(ConstantModuleInfo),
+    Package(ConstantPackageInfo),
 }
 
 #[derive(Debug, PartialEq)]
