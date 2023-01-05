@@ -56,12 +56,12 @@ pub fn check_version(minor_version: u16, major_version: u16) -> Result<()> {
 }
 
 trait ConstantMethodrefInfoResolver {
-    fn resolve_class_info(&self, constant_pool: &Vec<CpInfo>) -> Option<&ConstantClassInfo>;
+    fn resolve_class_info<'a>(&'a self, constant_pool: &'a Vec<CpInfo>) -> Option<&ConstantClassInfo>;
 }
 
-impl ConstantMethodrefInfoResolver for ConstantMethodRefInfo {
-    fn resolve_class_info(&self, constant_pool: &Vec<CpInfo>) -> Option<&ConstantClassInfo> {
-        match get_constant_pool_info(constant_pool, self.class_index) {
+impl ConstantMethodrefInfoResolver for ConstantMethodrefInfo {
+    fn resolve_class_info<'a>(&'a self, constant_pool: &'a Vec<CpInfo>) -> Option<&ConstantClassInfo> {
+        match get_constant_pool_info(constant_pool, self.class_index as usize) {
             Some(CpInfo::Class(info)) => Some(info),
             _ => None
         }
@@ -77,67 +77,69 @@ impl GetUtf8String for ConstantUtf8Info {
     }
 }
 
-fn check_constant_class_info(info: &ConstantClassInfo, constant_pool: &Vec<CpInfo>, is_validated: &mut Vec<bool>) -> Result<()> {
+fn check_constant_class_info(info: &ConstantClassInfo, constant_pool: &Vec<CpInfo>, is_validated: Vec<bool>) -> Result<Vec<bool>> {
     if info.tag != CONSTANT_CLASS { return error("The tag item has the value CONSTANT_Class (7).".to_string()); };
-    let name = check_each_cp(info.name_index as usize, constant_pool, is_validated)?;
+    let (name, is_validated) = check_each_cp(info.name_index as usize, constant_pool, is_validated)?;
     match name {
         CpInfo::Utf8(..) => (),
         _ => return error("The name_index must refer to CONSTANT_Utf8_info structure.".to_string())
     }
-    Ok(())
+    Ok(is_validated)
 }
 
-fn check_constant_string_info(info: &ConstantStringInfo, constant_pool: &Vec<CpInfo>, is_validated: &mut Vec<bool>) -> Result<()> {
+fn check_constant_string_info(info: &ConstantStringInfo, constant_pool: &Vec<CpInfo>, is_validated: Vec<bool>) -> Result<Vec<bool>> {
     if info.tag != CONSTANT_STRING { return error("The tag item has the value CONSTANT_String (8).".to_string()); }
-    let string = check_each_cp(info.string_index as usize, constant_pool, is_validated)?;
+    let (string, is_validated) = check_each_cp(info.string_index as usize, constant_pool, is_validated)?;
     match string {
         CpInfo::Utf8(..) => (),
         _ => return error("The string_index must refer to CONSTANT_Utf8_info structure.".to_string())?
     }
-    Ok(())
+    Ok(is_validated)
 }
 
-fn check_constant_fieldref_info(info: &ConstantFieldrefInfo, constant_pool: &Vec<CpInfo>, is_validated: &mut Vec<bool>) -> Result<()> {
+fn check_constant_fieldref_info(info: &ConstantFieldrefInfo, constant_pool: &Vec<CpInfo>, is_validated: Vec<bool>) -> Result<Vec<bool>> {
     if info.tag != CONSTANT_FIELDREF { return error("The tag item of a CONSTANT_Fieldref_info structure has the value CONSTANT_Fieldref (9).".to_string()); }
-    let class = check_each_cp(info.class_index as usize, constant_pool, is_validated)?;
-    match class {
-        CpInfo::Class(..) => (),
+    let (_, is_validated): (&ConstantClassInfo, _) = match check_each_cp(info.class_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Class(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_Class_info structure.".to_string())
-    }
-    let name_and_type = check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)?;
-    let descriptor_index = match name_and_type {
-        CpInfo::NameAndType(ConstantNameAndTypeInfo { descriptor_index, .. }) => descriptor_index,
+    };
+    let (name_and_type_info, is_validated): (&ConstantNameAndTypeInfo,_)  = match check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)? {
+        (CpInfo::NameAndType(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
     };
-    let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
+    let (descriptor_info, is_validated): (&ConstantUtf8Info, _) = match check_each_cp(name_and_type_info.descriptor_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Utf8(info), is_validated) => (info, is_validated),
+        _ => return error("The descriptor_index must refer to CONSTANT_NameAndType_info structure.".to_string())
+    };
+    let descriptor = descriptor_info.get_utf8_string();
     parse_field_type(&descriptor).or_else(|e| error(e))?;
-    Ok(())
+    Ok(is_validated)
 }
 
-fn check_constant_methodref_info(info: &ConstantMethodrefInfo, constant_pool: &Vec<CpInfo>, is_validated: &mut Vec<bool>) -> Result<()> {
+fn check_constant_methodref_info(info: &ConstantMethodrefInfo, constant_pool: &Vec<CpInfo>, is_validated: Vec<bool>) -> Result<Vec<bool>> {
     if info.tag != CONSTANT_METHODREF { return error("The tag item of a CONSTANT_Methodref_info structure has the value CONSTANT_Methodref (10).".to_string()); }
 
-    let class_info: &ConstantClassInfo = match check_each_cp(info.class_index as usize, constant_pool, is_validated)? {
-        CpInfo::Class(info) => info,
+    let (_, is_validated): (&ConstantClassInfo, _) = match check_each_cp(info.class_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Class(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_Class_info structure.".to_string())
     };
-
-    let name_and_type_info: &ConstantNameAndTypeInfo = match check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)? {
-        CpInfo::NameAndType(info) => info,
+    let (name_and_type_info, is_validated): (&ConstantNameAndTypeInfo,_)  = match check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)? {
+        (CpInfo::NameAndType(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
     };
 
-    let name_info: &ConstantUtf8Info = match check_each_cp(name_and_type_info.name_index as usize, constant_pool, is_validated)? {
-        CpInfo::Utf8(info) => info,
+    let (name_info, is_validated): (&ConstantUtf8Info, _) = match check_each_cp(name_and_type_info.name_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Utf8(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
     };
 
-    let descriptor_info: &ConstantUtf8Info = WIPWIPWIP
-
+    let (descriptor_info, is_validated): (&ConstantUtf8Info, _) = match check_each_cp(name_and_type_info.descriptor_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Utf8(info), is_validated) => (info, is_validated),
+        _ => return error("The descriptor_index must refer to CONSTANT_NameAndType_info structure.".to_string())
+    };
 
     let name = name_info.get_utf8_string();
-    // let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
-    WIPWIPWIP
+    let descriptor = descriptor_info.get_utf8_string();
 
     if name.starts_with('<') {
         if name != "<init>" { return error("A special method name <init> is expected, but not.".to_string()); }
@@ -147,62 +149,40 @@ fn check_constant_methodref_info(info: &ConstantMethodrefInfo, constant_pool: &V
             Err(e) => return error(e)
         }
     };
-    Ok(())
+    Ok(is_validated)
 }
 
-fn waaaaa_check_constant_methodref_info(info: &ConstantMethodrefInfo, constant_pool: &Vec<CpInfo>, is_validated: &mut Vec<bool>) -> Result<()> {
-    if info.tag != CONSTANT_METHODREF { return error("The tag item of a CONSTANT_Methodref_info structure has the value CONSTANT_Methodref (10).".to_string()); }
-    let class = check_each_cp(info.class_index as usize, constant_pool, is_validated)?;
-    match class {
-        CpInfo::Class(..) => (),
-        _ => return error("The class_index must refer to CONSTANT_Class_info structure.".to_string())
-    }
-    let name_and_type = check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)?;
-    let (name_index, descriptor_index) = match name_and_type {
-        CpInfo::NameAndType(ConstantNameAndTypeInfo { name_index, descriptor_index, .. }) => (name_index, descriptor_index),
-        _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
-    };
-
-
-    let name = get_cp_utf8_string(*name_index as usize, constant_pool, is_validated)?; // WIPWIPWIP
-    let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
-
-    if name.starts_with('<') {
-        if name != "<init>" { return error("A special method name <init> is expected, but not.".to_string()); }
-        match parse_method_descriptor(&descriptor) {
-            Ok(MethodType { return_type, .. }) if return_type == ReturnType::Void => (),
-            Ok(_) => return error("return type of <init> must be void.".to_string()),
-            Err(e) => return error(e)
-        }
-    };
-    Ok(())
-}
-
-fn check_constant_interface_methodref_info(info: &ConstantInterfaceMethodrefInfo, constant_pool: &Vec<CpInfo>, is_validated: &mut Vec<bool>) -> Result<()> {
+fn check_constant_interface_methodref_info(info: &ConstantInterfaceMethodrefInfo, constant_pool: &Vec<CpInfo>, is_validated: Vec<bool>) -> Result<Vec<bool>> {
     if info.tag != CONSTANT_INTERFACE_METHODREF { return error("The tag item of a CONSTANT_InterfaceMethodref_info structure has the value CONSTANT_InterfaceMethodref (11).".to_string()); }
-    let class = check_each_cp(info.class_index as usize, constant_pool, is_validated)?;
-    match class {
-        CpInfo::Class(..) => (),
+
+    let (_, is_validated): (&ConstantClassInfo, _) = match check_each_cp(info.class_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Class(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_Class_info structure.".to_string())
-    }
-    let name_and_type = check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)?;
-    let descriptor_index = match name_and_type {
-        CpInfo::NameAndType(ConstantNameAndTypeInfo { descriptor_index, .. }) => descriptor_index,
+    };
+    let (name_and_type_info, is_validated): (&ConstantNameAndTypeInfo,_)  = match check_each_cp(info.name_and_type_index as usize, constant_pool, is_validated)? {
+        (CpInfo::NameAndType(info), is_validated) => (info, is_validated),
         _ => return error("The class_index must refer to CONSTANT_NameAndType_info structure.".to_string())
     };
-    let descriptor = get_cp_utf8_string(*descriptor_index as usize, constant_pool, is_validated)?;
+
+    let (descriptor_info, is_validated): (&ConstantUtf8Info, _) = match check_each_cp(name_and_type_info.descriptor_index as usize, constant_pool, is_validated)? {
+        (CpInfo::Utf8(info), is_validated) => (info, is_validated),
+        _ => return error("The descriptor_index must refer to CONSTANT_NameAndType_info structure.".to_string())
+    };
+
+    let descriptor = descriptor_info.get_utf8_string();
+
     parse_field_type(&descriptor).or_else(|e| error(e))?;
-    Ok(())
+    Ok(is_validated)
 }
 
 // 4.4. The Constant Pool
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.4
-fn check_each_cp<'a>(index: usize, constant_pool: &'a Vec<CpInfo>, is_validated: &'a mut Vec<bool>) -> Result<&'a CpInfo> {
+fn check_each_cp<'a>(index: usize, constant_pool: &'a Vec<CpInfo>, is_validated: Vec<bool>) -> Result<(&'a CpInfo, Vec<bool>)> {
     if constant_pool.get(index).is_none() { return error("missing constant_pool entry.".to_string()); }
-    if is_validated[index] { return Ok(&constant_pool[index]); }
+    if is_validated[index] { return Ok((&constant_pool[index], is_validated.clone())); }
 
     let cp_info = &constant_pool[index];
-    match cp_info {
+    let is_validated = match cp_info {
         CpInfo::Utf8(info) => { todo!() }
         CpInfo::Integer(info) => { todo!() }
         CpInfo::Float(info) => { todo!() }
@@ -220,49 +200,22 @@ fn check_each_cp<'a>(index: usize, constant_pool: &'a Vec<CpInfo>, is_validated:
         CpInfo::InvokeDynamic(info) => { todo!() }
         CpInfo::Module(info) => { todo!() }
         CpInfo::Package(info) => { todo!() }
-    }
+    };
 
+    let mut is_validated = is_validated.to_owned();
     is_validated[index] = true;
-    Ok(cp_info)
+    Ok((cp_info, is_validated.clone()))
 }
 
 pub fn check_constant_pool(constant_pool: &Vec<CpInfo>) -> Result<()> {
     let mut is_validated: Vec<bool> = vec![false; constant_pool.len()];
 
     for index in 0..constant_pool.len() {
-        check_each_cp(index, &constant_pool, &mut is_validated)?;
+        is_validated = check_each_cp(index, &constant_pool, is_validated.clone())?.1;
     }
 
     Ok(())
 }
-
-// // 4.2.1. Binary Class and Interface Names
-// // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.2.1
-// #[allow(unused_variables)]
-// fn is_valid_internal_class_name(bytes: String) -> Result<()> {
-//     // println!("class name: {}", bytes);
-//     // todo!()
-//     Ok(())
-// }
-//
-// // 4.3.2. Field Descriptors
-// // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.3.2
-// fn is_valid_field_descriptor(bytes: String) -> Result<()> {
-//     let (head, tail) = bytes.split_at(1);
-//     match head {
-//         "B" | "C" | "D" | "F" | "I" | "J" | "S" | "Z" => Ok(()),
-//         "L" => {
-//             // Excluding the last character `;`, check if it's the internal form of the class name.
-//             tail.to_string().pop();
-//             let (class_name, last) = tail.split_at(tail.len() - 1);
-//             is_valid_internal_class_name(class_name.to_string())?;
-//             if last != ";" { return error("ObjectType of field descriptor must end with `;`".to_string()); }
-//             Ok(())
-//         }
-//         "[" => is_valid_field_descriptor(tail.to_string()),
-//         _ => return error("Invalid field descriptor.".to_string())
-//     }
-// }
 
 
 fn check_fields(fields: &Vec<FieldsInfo>, constant_pool: &Vec<CpInfo>) -> Result<()> {
