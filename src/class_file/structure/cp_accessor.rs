@@ -8,16 +8,15 @@ fn get_constant_pool_info(constant_pool: &Vec<CpInfo>, index: usize) -> Option<&
 }
 
 trait CpAccessor {
-    fn access_as_class(&self, cp: &CpInfo) -> Option<ClassCpAccessor>;
+    fn access_as_class<'a>(&'a self, cp: &'a CpInfo) -> ClassCpAccessor<'a>;
 }
 
 impl CpAccessor for &Vec<CpInfo> {
-    fn access_as_class(&self, cp: &CpInfo) -> ClassCpAccessor {
-        let class_info: Option<&ConstantClassInfo> = match get_constant_pool_info(constant_pool, cp.name_index as usize) {
-            Some(CpInfo::Class(info)) => Some(info),
-            _ => None
-        };
-        ClassCpAccessor { constant_pool: *self, class_info }
+    fn access_as_class<'a>(&'a self, cp: &'a CpInfo) -> ClassCpAccessor<'a> {
+        match cp {
+            CpInfo::Class(info) => ClassCpAccessor { constant_pool: *self, class_info: Some(info) },
+            _ => ClassCpAccessor { constant_pool: *self, class_info: None },
+        }
     }
 }
 
@@ -26,16 +25,16 @@ struct ClassCpAccessor<'a> {
     class_info: Option<&'a ConstantClassInfo>,
 }
 
-impl ClassCpAccessor { // WIPWIPWIP expected lifetime parameter
+impl ClassCpAccessor<'_> {
     fn name(&self) -> Utf8CpAccessor {
-        match self.class_info  {
+        match self.class_info {
             Some(class_info) => {
                 match get_constant_pool_info(&self.constant_pool, class_info.name_index as usize) {
-                    Some(CpInfo::Utf8(info)) => Utf8CpAccessor { constant_pool, utf8_info: Some(info) },
-                    _ => Utf8CpAccessor { constant_pool, utf8_info: None }
+                    Some(CpInfo::Utf8(info)) => Utf8CpAccessor { constant_pool: self.constant_pool, utf8_info: Some(info) },
+                    _ => Utf8CpAccessor { constant_pool: self.constant_pool, utf8_info: None }
                 }
             }
-            None => Utf8CpAccessor { constant_pool, utf8_info: None }
+            None => Utf8CpAccessor { constant_pool: self.constant_pool, utf8_info: None }
         }
     }
 }
@@ -45,10 +44,10 @@ struct Utf8CpAccessor<'a> {
     utf8_info: Option<&'a ConstantUtf8Info>,
 }
 
-impl Utf8CpAccessor {
+impl Utf8CpAccessor<'_> {
     fn bytes_as_string(&self) -> Option<String> {
         match self.utf8_info {
-            Some(utf8_info) =>  String::from_utf8(utf8_info.bytes.clone()).ok(),
+            Some(utf8_info) => String::from_utf8(utf8_info.bytes.clone()).ok(),
             None => None
         }
     }
@@ -77,7 +76,7 @@ fn test() {
         CpInfo::Utf8(ConstantUtf8Info { tag: 0x01, length: 0x0c, bytes: "Sample1.java".as_bytes().to_vec() }),
     ];
 
-    let str = constant_pool.access_as_class(&constant_pool[8]).name().bytes_as_string();
+    let str = constant_pool.access_as_class(&constant_pool[7]).name().bytes_as_string();
 
-    assert_eq!(str, Ok("Sample1".to_string()))
+    assert_eq!(str, Some("Sample1".to_string()))
 }
