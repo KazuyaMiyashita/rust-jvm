@@ -1,3 +1,5 @@
+pub mod cp_accessor;
+
 // 4.1. The ClassFile Structure
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
 #[derive(Debug, PartialEq)]
