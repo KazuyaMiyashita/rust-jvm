@@ -186,38 +186,38 @@ pub(crate) fn check_constant_pool(constant_pool: &Vec<CpInfo>, major_version: u1
 
 // original constant_pool table is indexed from 1 to constant_pool_count - 1.
 // Note that the Vec of this cp_infos structure is indexed from 0.
-fn get_constant_pool_info(constant_pool: &Vec<CpInfo>, index: usize) -> Option<&CpInfo> {
-    constant_pool.get(index - 1)
-}
+// fn get_constant_pool_info(constant_pool: &Vec<CpInfo>, index: usize) -> Option<&CpInfo> {
+//     constant_pool.get(index - 1)
+// }
+//
+// fn is_constant_utf8_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
+//     match get_constant_pool_info(constant_pool, index as usize) {
+//         Some(CpInfo::Utf8(..)) => Ok(()),
+//         Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
+//         _ => error("missing constant_pool entry.".to_string())
+//     }
+// }
 
-fn is_constant_utf8_info_entry(index: u16, constant_pool: &Vec<CpInfo>) -> Result<()> {
-    match get_constant_pool_info(constant_pool, index as usize) {
-        Some(CpInfo::Utf8(..)) => Ok(()),
-        Some(_) => error("This index must refer to CONSTANT_Utf8_info structure.".to_string()),
-        _ => error("missing constant_pool entry.".to_string())
-    }
-}
-
-fn check_fields(fields: &Vec<FieldsInfo>, constant_pool: &Vec<CpInfo>) -> Result<()> {
-    fields.iter().try_for_each(|field| {
-        is_constant_utf8_info_entry(field.name_index, constant_pool)
-    })
-}
-
-fn check_methods(methods: &Vec<MethodInfo>, constant_pool: &Vec<CpInfo>) -> Result<()> {
-    methods.iter().try_for_each(|method_info| {
-        is_constant_utf8_info_entry(method_info.name_index, constant_pool)?;
-        method_info.attributes.iter().try_for_each(|attribute| {
-            is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
-        })
-    })
-}
-
-fn check_attributes(attributes: &Vec<AttributeInfo>, constant_pool: &Vec<CpInfo>) -> Result<()> {
-    attributes.iter().try_for_each(|attribute| {
-        is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
-    })
-}
+// fn check_fields(fields: &Vec<FieldsInfo>, constant_pool: &Vec<CpInfo>) -> Result<()> {
+//     fields.iter().try_for_each(|field| {
+//         is_constant_utf8_info_entry(field.name_index, constant_pool)
+//     })
+// }
+//
+// fn check_methods(methods: &Vec<MethodInfo>, constant_pool: &Vec<CpInfo>) -> Result<()> {
+//     methods.iter().try_for_each(|method_info| {
+//         is_constant_utf8_info_entry(method_info.name_index, constant_pool)?;
+//         method_info.attributes.iter().try_for_each(|attribute| {
+//             is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
+//         })
+//     })
+// }
+//
+// fn check_attributes(attributes: &Vec<Attribute>, constant_pool: &Vec<CpInfo>) -> Result<()> {
+//     attributes.iter().try_for_each(|attribute| {
+//         is_constant_utf8_info_entry(attribute.attribute_name_index, constant_pool)
+//     })
+// }
 
 
 // 4.8. Format Checking
@@ -227,9 +227,9 @@ pub fn check_class_file(class_file: &ClassFile) -> Result<()> {
 
     check_constant_pool(&class_file.constant_pool, class_file.major_version)?;
 
-    check_attributes(&class_file.attributes, &class_file.constant_pool)?;
-    check_fields(&class_file.fields, &class_file.constant_pool)?;
-    check_methods(&class_file.methods, &class_file.constant_pool)?;
+    // check_attributes(&class_file.attributes, &class_file.constant_pool)?;
+    // check_fields(&class_file.fields, &class_file.constant_pool)?;
+    // check_methods(&class_file.methods, &class_file.constant_pool)?;
 
     Ok(())
 }

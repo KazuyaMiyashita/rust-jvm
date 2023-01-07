@@ -20,7 +20,7 @@ pub struct ClassFile {
     pub methods_count: u16,
     pub methods: Vec<MethodInfo>,
     pub attributes_count: u16,
-    pub attributes: Vec<AttributeInfo>,
+    pub attributes: Vec<Attribute>,
 }
 
 // 4.4. The Constant Pool
@@ -190,7 +190,7 @@ pub struct FieldsInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
     pub attributes_count: u16,
-    pub attributes: Vec<AttributeInfo>,
+    pub attributes: Vec<Attribute>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -199,17 +199,17 @@ pub struct MethodInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
     pub attributes_count: u16,
-    pub attributes: Vec<AttributeInfo>, // FIXME! First, look at the constant_pool using descriptor_index to determine the type of Attribute! There is more than CodeAttributeInfo!
+    pub attributes: Vec<Attribute>,
 }
 
 // WIP
 #[derive(Debug, PartialEq)]
 pub enum Attribute {
+    General(AttributeInfo),
     ConstantValue(ConstantValueAttribute),
     Code(CodeAttributeInfo),
     StackMapTable(StackMapTableAttribute),
     BootstrapMethods(BootstrapMethodsAttribute),
-    General(AttributeInfo),
 }
 
 #[derive(Debug, PartialEq)]
@@ -240,7 +240,7 @@ pub struct CodeAttributeInfo {
     pub exception_table_length: u16,
     pub exception_table: Vec<ExceptionTable>,
     pub attributes_count: u16,
-    pub attributes: Vec<AttributeInfo>,
+    pub attributes: Vec<Attribute>,
 }
 
 // 4.7.4. The StackMapTable Attribute

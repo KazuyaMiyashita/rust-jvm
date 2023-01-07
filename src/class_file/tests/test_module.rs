@@ -28,7 +28,7 @@ fn test() {
     let class_file = read_class_file(bytes).unwrap();
 
 
-    // println!("{}", class_file);
+    println!("{}", class_file);
 
     assert_eq!(class_file, ClassFile {
         magic: [0xca, 0xfe, 0xba, 0xbe],
@@ -60,16 +60,16 @@ fn test() {
         methods: vec![],
         attributes_count: 2,
         attributes: vec![
-            AttributeInfo {
+            Attribute::General(AttributeInfo {
                 attribute_name_index: 0x0003,
                 attribute_length: 2,
                 info: vec![0x00, 0x04],
-            },
-            AttributeInfo {
+            }),
+            Attribute::General(AttributeInfo {
                 attribute_name_index: 0x0005,
                 attribute_length: 28,
                 info: vec![0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x08, 0x80, 0x00, 0x00, 0x0a, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
-            },
+            }),
         ],
     });
 

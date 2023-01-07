@@ -86,16 +86,14 @@ fn test() {
                 name_index: 11,
                 descriptor_index: 12,
                 attributes_count: 0,
-                attributes: vec![
-                ]
+                attributes: vec![],
             },
             FieldsInfo {
                 access_flags: 0x0002,
                 name_index: 15,
                 descriptor_index: 16,
                 attributes_count: 0,
-                attributes: vec![
-                ]
+                attributes: vec![],
             },
         ],
         methods_count: 1,
@@ -106,21 +104,34 @@ fn test() {
                 descriptor_index: 17,
                 attributes_count: 1,
                 attributes: vec![
-                    AttributeInfo {
+                    Attribute::Code(CodeAttributeInfo {
                         attribute_name_index: 0x0012,
                         attribute_length: 51,
-                        info: vec![0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x0f, 0x2a, 0xb7, 0x00, 0x01, 0x2a, 0x2b, 0xb5, 0x00, 0x07, 0x2a, 0x1c, 0xb5, 0x00, 0x0d, 0xb1, 0x00, 0x00, 0x00, 0x01, 0x00, 0x13, 0x00, 0x00, 0x00, 0x12, 0x00, 0x04, 0x00, 0x00, 0x00, 0x06, 0x00, 0x04, 0x00, 0x07, 0x00, 0x09, 0x00, 0x08, 0x00, 0x0e, 0x00, 0x09],
-                    },
-                ]
+                        max_stack: 2,
+                        max_locals: 3,
+                        code_length: 15,
+                        code: vec![0x2a, 0xb7, 0x00, 0x01, 0x2a, 0x2b, 0xb5, 0x00, 0x07, 0x2a, 0x1c, 0xb5, 0x00, 0x0d, 0xb1],
+                        exception_table_length: 0,
+                        exception_table: vec![],
+                        attributes_count: 1,
+                        attributes: vec![
+                            Attribute::General(AttributeInfo {
+                                attribute_name_index: 0x0013,
+                                attribute_length: 18,
+                                info: vec![0x00, 0x04, 0x00, 0x00, 0x00, 0x06, 0x00, 0x04, 0x00, 0x07, 0x00, 0x09, 0x00, 0x08, 0x00, 0x0e, 0x00, 0x09],
+                            }),
+                        ],
+                    }),
+                ],
             },
         ],
         attributes_count: 1,
         attributes: vec![
-            AttributeInfo {
+            Attribute::General(AttributeInfo {
                 attribute_name_index: 0x0014,
                 attribute_length: 2,
                 info: vec![0x00, 0x15],
-            },
+            }),
         ],
     });
 
