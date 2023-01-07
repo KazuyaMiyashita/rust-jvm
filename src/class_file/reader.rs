@@ -105,9 +105,9 @@ impl Reader for ClassFile {
         let interfaces_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let interfaces: Vec<u16> = VecReader::read(&bytes, &mut *offset, interfaces_count as usize)?;
         let fields_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let fields: Vec<FieldsInfo> = VecReaderWithCp::read(&bytes, &mut *offset, &constant_pool,fields_count as usize)?;
+        let fields: Vec<FieldsInfo> = VecReaderWithCp::read(&bytes, &mut *offset, &constant_pool, fields_count as usize)?;
         let methods_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let methods: Vec<MethodInfo> = VecReaderWithCp::read(&bytes, &mut *offset, &constant_pool,methods_count as usize)?;
+        let methods: Vec<MethodInfo> = VecReaderWithCp::read(&bytes, &mut *offset, &constant_pool, methods_count as usize)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes: Vec<Attribute> = VecReaderWithCp::read(&bytes, &mut *offset, &constant_pool, attributes_count as usize)?;
 
@@ -353,7 +353,7 @@ impl ReaderWithCp for MethodInfo {
         let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let attributes: Vec<Attribute> = VecReaderWithCp::read(&bytes, &mut *offset,constant_pool, attributes_count as usize)?;
+        let attributes: Vec<Attribute> = VecReaderWithCp::read(&bytes, &mut *offset, constant_pool, attributes_count as usize)?;
         Ok(MethodInfo {
             access_flags,
             name_index,
@@ -372,12 +372,12 @@ impl ReaderWithCp for Attribute {
         let attribute = match attribute_name.as_str() {
             "ConstantValue" => {
                 let constantvalue_index: u16 = Reader::read(&bytes, &mut *offset)?;
-                Attribute::ConstantValue(ConstantValueAttribute{
+                Attribute::ConstantValue(ConstantValueAttribute {
                     attribute_name_index,
                     attribute_length,
-                    constantvalue_index
+                    constantvalue_index,
                 })
-            },
+            }
             "Code" => {
                 let max_stack: u16 = Reader::read(&bytes, &mut *offset)?;
                 let max_locals: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -399,7 +399,7 @@ impl ReaderWithCp for Attribute {
                     attributes_count,
                     attributes,
                 })
-            },
+            }
             "StackMapTable" => {
                 let number_of_entries: u16 = Reader::read(&bytes, &mut *offset)?;
                 let entries: Vec<StackMapFrame> = VecReader::read(&bytes, &mut *offset, number_of_entries as usize)?;
@@ -409,7 +409,7 @@ impl ReaderWithCp for Attribute {
                     number_of_entries,
                     entries,
                 })
-            },
+            }
             "BootstrapMethods" => {
                 let num_bootstrap_methods: u16 = Reader::read(&bytes, &mut *offset)?;
                 let bootstrap_methods: Vec<BootstrapMethod> = VecReader::read(&bytes, &mut *offset, num_bootstrap_methods as usize)?;
@@ -419,7 +419,49 @@ impl ReaderWithCp for Attribute {
                     num_bootstrap_methods,
                     bootstrap_methods,
                 })
-            },
+            }
+            "MethodParameters" => {
+                let parameters_count: u8 = Reader::read(&bytes, &mut *offset)?;
+                let parameters: Vec<Parameter> = VecReader::read(&bytes, &mut *offset, parameters_count as usize)?;
+                Attribute::MethodParameters(MethodParametersAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    parameters_count,
+                    parameters,
+                })
+            }
+            "Module" => {
+                let module_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+                let module_flags: u16 = Reader::read(&bytes, &mut *offset)?;
+                let module_version_index: u16 = Reader::read(&bytes, &mut *offset)?;
+                let requires_count: u16 = Reader::read(&bytes, &mut *offset)?;
+                let requires: Vec<Require> = VecReader::read(&bytes, &mut *offset, requires_count as usize)?;
+                let exports_count: u16 = Reader::read(&bytes, &mut *offset)?;
+                let exports: Vec<Export> = VecReader::read(&bytes, &mut *offset, exports_count as usize)?;
+                let opens_count: u16 = Reader::read(&bytes, &mut *offset)?;
+                let opens: Vec<Open> = VecReader::read(&bytes, &mut *offset, opens_count as usize)?;
+                let uses_count: u16 = Reader::read(&bytes, &mut *offset)?;
+                let uses_index: Vec<u16> = VecReader::read(&bytes, &mut *offset, uses_count as usize)?;
+                let provides_count: u16 = Reader::read(&bytes, &mut *offset)?;
+                let provides: Vec<Provide> = VecReader::read(&bytes, &mut *offset, provides_count as usize)?;
+                Attribute::Module(ModuleAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    module_name_index,
+                    module_flags,
+                    module_version_index,
+                    requires_count,
+                    requires,
+                    exports_count,
+                    exports,
+                    opens_count,
+                    opens,
+                    uses_count,
+                    uses_index,
+                    provides_count,
+                    provides,
+                })
+            }
             _ => {
                 let info: Vec<u8> = VecReader::read(&bytes, &mut *offset, attribute_length as usize)?;
                 Attribute::General(AttributeInfo {
@@ -532,6 +574,77 @@ impl Reader for BootstrapMethod {
             bootstrap_method_ref,
             num_bootstrap_arguments,
             bootstrap_arguments,
+        })
+    }
+}
+
+impl Reader for Parameter {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Parameter> {
+        let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
+        Ok(Parameter {
+            name_index,
+            access_flags,
+        })
+    }
+}
+
+// for ModuleAttribute
+
+impl Reader for Require {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Require> {
+        let requires_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let requires_flags: u16 = Reader::read(&bytes, &mut *offset)?;
+        let requires_to_count: u16 = Reader::read(&bytes, &mut *offset)?;
+        let requires_to_index: Vec<u16> = VecReader::read(&bytes, &mut *offset, requires_to_count as u16 as usize)?;
+        Ok(Require {
+            requires_index,
+            requires_flags,
+            requires_to_count,
+            requires_to_index,
+        })
+    }
+}
+
+impl Reader for Export {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Export> {
+        let exports_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let exports_flags: u16 = Reader::read(&bytes, &mut *offset)?;
+        let exports_to_count: u16 = Reader::read(&bytes, &mut *offset)?;
+        let exports_to_index: Vec<u16> = VecReader::read(&bytes, &mut *offset, exports_to_count as u16 as usize)?;
+        Ok(Export {
+            exports_index,
+            exports_flags,
+            exports_to_count,
+            exports_to_index,
+        })
+    }
+}
+
+impl Reader for Open {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Open> {
+        let opens_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let opens_flags: u16 = Reader::read(&bytes, &mut *offset)?;
+        let opens_to_count: u16 = Reader::read(&bytes, &mut *offset)?;
+        let opens_to_index: Vec<u16> = VecReader::read(&bytes, &mut *offset, opens_to_count as u16 as usize)?;
+        Ok(Open {
+            opens_index,
+            opens_flags,
+            opens_to_count,
+            opens_to_index,
+        })
+    }
+}
+
+impl Reader for Provide {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<Provide> {
+        let provides_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let provides_with_count: u16 = Reader::read(&bytes, &mut *offset)?;
+        let provides_with_index: Vec<u16> = VecReader::read(&bytes, &mut *offset, provides_with_count as u16 as usize)?;
+        Ok(Provide {
+            provides_index,
+            provides_with_count,
+            provides_with_index,
         })
     }
 }

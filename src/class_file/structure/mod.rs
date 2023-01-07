@@ -202,7 +202,6 @@ pub struct MethodInfo {
     pub attributes: Vec<Attribute>,
 }
 
-// WIP
 #[derive(Debug, PartialEq)]
 pub enum Attribute {
     General(AttributeInfo),
@@ -210,6 +209,8 @@ pub enum Attribute {
     Code(CodeAttributeInfo),
     StackMapTable(StackMapTableAttribute),
     BootstrapMethods(BootstrapMethodsAttribute),
+    MethodParameters(MethodParametersAttribute),
+    Module(ModuleAttribute),
 }
 
 #[derive(Debug, PartialEq)]
@@ -351,12 +352,76 @@ pub struct BootstrapMethodsAttribute {
     pub attribute_name_index: u16,
     pub attribute_length: u32,
     pub num_bootstrap_methods: u16,
-    pub bootstrap_methods: Vec<BootstrapMethod>
+    pub bootstrap_methods: Vec<BootstrapMethod>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct BootstrapMethod {
     pub bootstrap_method_ref: u16,
     pub num_bootstrap_arguments: u16,
-    pub bootstrap_arguments: Vec<u16>
+    pub bootstrap_arguments: Vec<u16>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct MethodParametersAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub parameters_count: u8,
+    pub parameters: Vec<Parameter>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Parameter {
+    pub name_index: u16,
+    pub access_flags: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ModuleAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub module_name_index: u16,
+    pub module_flags: u16,
+    pub module_version_index: u16,
+    pub requires_count: u16,
+    pub requires: Vec<Require>,
+    pub exports_count: u16,
+    pub exports: Vec<Export>,
+    pub opens_count: u16,
+    pub opens: Vec<Open>,
+    pub uses_count: u16,
+    pub uses_index: Vec<u16>,
+    pub provides_count: u16,
+    pub provides: Vec<Provide>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Require {
+    pub requires_index: u16,
+    pub requires_flags: u16,
+    pub requires_to_count: u16,
+    pub requires_to_index: Vec<u16>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Export {
+    pub exports_index: u16,
+    pub exports_flags: u16,
+    pub exports_to_count: u16,
+    pub exports_to_index: Vec<u16>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Open {
+    pub opens_index: u16,
+    pub opens_flags: u16,
+    pub opens_to_count: u16,
+    pub opens_to_index: Vec<u16>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Provide {
+    pub provides_index: u16,
+    pub provides_with_count: u16,
+    pub provides_with_index: Vec<u16>,
 }
