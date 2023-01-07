@@ -1,22 +1,11 @@
 use super::structure::*;
-use super::checker::{check_magic, check_version};
+use super::error::{Error, Result};
+use super::checker;
 
-use thiserror::Error;
-
-pub fn read_class_file(bytes: &[u8]) -> Result<ClassFile> {
+pub fn read_class_file(bytes: Vec<u8>) -> Result<ClassFile> {
     let class_file: ClassFile = Reader::read(&bytes, &mut (0 as usize))?;
     Ok(class_file)
 }
-
-pub type Result<T> = std::result::Result<T, ReadError>;
-
-#[derive(Error, Debug, PartialEq)]
-#[error("Failed to read class file. {message:} (at offset {offset} [byte])")]
-pub struct ReadError {
-    message: String,
-    offset: usize,
-}
-
 
 trait Reader {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<Self> where Self: Sized;
@@ -26,6 +15,11 @@ trait VecReader {
     fn read(bytes: &[u8], offset: &mut usize, num_of_items: usize) -> Result<Vec<Self>> where Self: Sized;
 }
 
+fn error<T>(message: String, offset: &mut usize) -> Result<T> {
+    Err(Error { message: format!("{}, offset: {}", message, offset.clone()) })
+}
+
+
 impl<const N: usize> Reader for [u8; N] {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<[u8; N]> {
         let next = *offset + N;
@@ -34,10 +28,7 @@ impl<const N: usize> Reader for [u8; N] {
             *offset = next;
             Ok(a)
         } else {
-            Err(ReadError {
-                message: "Input is shorter than required and cannot be read.".to_string(),
-                offset: offset.clone(),
-            })
+            error("Input is shorter than required and cannot be read.".to_string(), offset)
         }
     }
 }
@@ -73,26 +64,22 @@ impl<T> VecReader for T where T: Reader {
     }
 }
 
-// utils
-fn error<T>(message: String, offset: &mut usize) -> Result<T> {
-    Err(ReadError { message, offset: offset.clone() })
-}
-
 impl Reader for ClassFile {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<ClassFile> {
         let magic: [u8; 4] = Reader::read(&bytes, &mut *offset)?;
         // check the magic item `cafebabe` at the first early.
-        check_magic(&magic).or_else(|e| error(e.message, offset))?;
+        checker::check_magic(&magic).or_else(|e| error(e.message, offset))?;
         let minor_version: u16 = Reader::read(&bytes, &mut *offset)?;
         let major_version: u16 = Reader::read(&bytes, &mut *offset)?;
         // check the class file version early.
-        check_version(minor_version, major_version).or_else(|e| error(e.message, offset))?;
+        checker::check_version(minor_version, major_version).or_else(|e| error(e.message, offset))?;
         // The rest of the checking done by the class file reader is only checking
         // whether all the bytes at the end have been consumed, and the rest is left to ClassFileChecker
         let constant_pool_count: u16 = Reader::read(&bytes, &mut *offset)?;
         // The constant_pool table is indexed from 1 to constant_pool_count - 1.
         // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
         let constant_pool: Vec<CpInfo> = VecReader::read(&bytes, &mut *offset, (constant_pool_count - 1) as usize)?;
+        checker::check_constant_pool(&constant_pool, major_version)?; // for debug
         let access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
         let this_class: u16 = Reader::read(&bytes, &mut *offset)?;
         let super_class: u16 = Reader::read(&bytes, &mut *offset)?;
@@ -108,7 +95,7 @@ impl Reader for ClassFile {
         // 4.8. Format Checking
         // The class file must not be truncated or have extra bytes at the end.
         if bytes.len() != *offset {
-            return error("Too many bytes after reading class file.".to_string(), offset);
+            return error(format!("Too many bytes after reading class file. {}  bytes remaining.", bytes.len() - *offset), offset);
         }
 
         Ok(ClassFile {
@@ -347,7 +334,7 @@ impl Reader for MethodInfo {
         let name_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let descriptor_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let attributes_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let attributes: Vec<CodeAttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
+        let attributes: Vec<AttributeInfo> = VecReader::read(&bytes, &mut *offset, attributes_count as usize)?;
         Ok(MethodInfo {
             access_flags,
             name_index,

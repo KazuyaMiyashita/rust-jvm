@@ -34,7 +34,7 @@ pub fn check_version(minor_version: u16, major_version: u16) -> Result<()> {
 }
 
 
-fn check_constant_pool(constant_pool: &Vec<CpInfo>, major_version: u16) -> Result<()> {
+pub(crate) fn check_constant_pool(constant_pool: &Vec<CpInfo>, major_version: u16) -> Result<()> {
     for i in 0..constant_pool.len() {
         let cp_index = (i + 1) as u16;
         match constant_pool[i] {

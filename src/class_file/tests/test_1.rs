@@ -23,7 +23,7 @@ fn test() {
     // javac 17.0.5
     // % javac Sample1.java
     // % od -An -t x1 Sample1.class | sed -e 's/^[ \s]*//' -e 's/[ \s]*$//' -e 's/\([0-9|a-z][0-9|a-z]\)/0x\1,/g'
-    let bytes: &[u8] = &[
+    let bytes: Vec<u8> = vec![
         0xca, 0xfe, 0xba, 0xbe, 0x00, 0x00, 0x00, 0x3d, 0x00, 0x13, 0x0a, 0x00, 0x02, 0x00, 0x03, 0x07,
         0x00, 0x04, 0x0c, 0x00, 0x05, 0x00, 0x06, 0x01, 0x00, 0x10, 0x6a, 0x61, 0x76, 0x61, 0x2f, 0x6c,
         0x61, 0x6e, 0x67, 0x2f, 0x4f, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x01, 0x00, 0x06, 0x3c, 0x69, 0x6e,
@@ -48,7 +48,7 @@ fn test() {
 
     let class_file = read_class_file(bytes).unwrap();
 
-    // println!("{}", class_file);
+    println!("{}", class_file);
 
     assert_eq!(class_file, ClassFile {
         magic: [0xca, 0xfe, 0xba, 0xbe],
@@ -91,23 +91,10 @@ fn test() {
                 descriptor_index: 6,
                 attributes_count: 1,
                 attributes: vec![
-                    CodeAttributeInfo {
+                    AttributeInfo {
                         attribute_name_index: 0x000d,
                         attribute_length: 29,
-                        max_stack: 1,
-                        max_locals: 1,
-                        code_length: 5,
-                        code: vec![0x2a, 0xb7, 0x00, 0x01, 0xb1],
-                        exception_table_length: 0,
-                        exception_table: vec![],
-                        attributes_count: 1,
-                        attributes: vec![
-                            AttributeInfo {
-                                attribute_name_index: 0x000e,
-                                attribute_length: 6,
-                                info: vec![0x00, 0x01, 0x00, 0x00, 0x00, 0x01],
-                            },
-                        ]
+                        info: vec![0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x05, 0x2a, 0xb7, 0x00, 0x01, 0xb1, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01],
                     },
                 ]
             },
@@ -117,23 +104,10 @@ fn test() {
                 descriptor_index: 16,
                 attributes_count: 1,
                 attributes: vec![
-                    CodeAttributeInfo {
+                    AttributeInfo {
                         attribute_name_index: 0x000d,
                         attribute_length: 49,
-                        max_stack: 2,
-                        max_locals: 3,
-                        code_length: 13,
-                        code: vec![0x04, 0x3b, 0x10, 0x2a, 0x3c, 0x1a, 0x1b, 0xb8, 0x00, 0x07, 0x3d, 0x1c, 0xac],
-                        exception_table_length: 0,
-                        exception_table: vec![],
-                        attributes_count: 1,
-                        attributes: vec![
-                            AttributeInfo {
-                                attribute_name_index: 0x000e,
-                                attribute_length: 18,
-                                info: vec![0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x02, 0x00, 0x05, 0x00, 0x05, 0x00, 0x06, 0x00, 0x0b, 0x00, 0x07],
-                            },
-                        ]
+                        info: vec![0x00, 0x02, 0x00, 0x03, 0x00, 0x00, 0x00, 0x0d, 0x04, 0x3b, 0x10, 0x2a, 0x3c, 0x1a, 0x1b, 0xb8, 0x00, 0x07, 0x3d, 0x1c, 0xac, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x12, 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x02, 0x00, 0x05, 0x00, 0x05, 0x00, 0x06, 0x00, 0x0b, 0x00, 0x07],
                     },
                 ]
             },
@@ -143,23 +117,10 @@ fn test() {
                 descriptor_index: 12,
                 attributes_count: 1,
                 attributes: vec![
-                    CodeAttributeInfo {
+                    AttributeInfo {
                         attribute_name_index: 0x000d,
                         attribute_length: 28,
-                        max_stack: 2,
-                        max_locals: 2,
-                        code_length: 4,
-                        code: vec![0x1a, 0x1b, 0x60, 0xac],
-                        exception_table_length: 0,
-                        exception_table: vec![],
-                        attributes_count: 1,
-                        attributes: vec![
-                            AttributeInfo {
-                                attribute_name_index: 0x000e,
-                                attribute_length: 6,
-                                info: vec![0x00, 0x01, 0x00, 0x00, 0x00, 0x0b],
-                            },
-                        ]
+                        info: vec![0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x04, 0x1a, 0x1b, 0x60, 0xac, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0e, 0x00, 0x00, 0x00, 0x06, 0x00, 0x01, 0x00, 0x00, 0x00, 0x0b],
                     },
                 ]
             },

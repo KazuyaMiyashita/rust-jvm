@@ -199,7 +199,7 @@ pub struct MethodInfo {
     pub name_index: u16,
     pub descriptor_index: u16,
     pub attributes_count: u16,
-    pub attributes: Vec<CodeAttributeInfo>,
+    pub attributes: Vec<AttributeInfo>, // FIXME! First, look at the constant_pool using descriptor_index to determine the type of Attribute! There is more than CodeAttributeInfo!
 }
 
 
