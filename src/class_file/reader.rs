@@ -293,7 +293,6 @@ impl Reader for ConstantPackageInfo {
         Ok(ConstantPackageInfo {
             tag: CONSTANT_PACKAGE,
             name_index: Reader::read(&bytes, &mut *offset)?,
-
         })
     }
 }

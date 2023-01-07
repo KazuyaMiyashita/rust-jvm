@@ -47,19 +47,96 @@ fn get_constant_pool_info(constant_pool: &Vec<CpInfo>, index: u16) -> Result<&Cp
 
 pub trait CpAccessor {
     // indexed from 1 to constant_pool_count - 1.
-    fn access_as_class<'a>(&'a self, index: u16) -> ClassCpAccessor<'a>;
+    fn access_as_class(&self, index: u16) -> ClassCpAccessor;
 }
 
 impl CpAccessor for &Vec<CpInfo> {
-    fn access_as_class<'a>(&'a self, index: u16) -> ClassCpAccessor<'a> {
-        match get_constant_pool_info(self, index) {
-            Ok(cp) => {
-                match cp {
-                    CpInfo::Class(info) => ClassCpAccessor { constant_pool: *self, class_info_or_err: Ok(info) },
-                    other_info => ClassCpAccessor { constant_pool: *self, class_info_or_err: error(format!("Must specify index of CONSTANT_Class_info but {} found! index: {}", cp_info_name(other_info), index)) },
-                }
-            }
-            Err(e) => ClassCpAccessor { constant_pool: *self, class_info_or_err: Err(e) }
+    fn access_as_class(&self, index: u16) -> ClassCpAccessor {
+        ClassCpAccessor::from(self, index)
+    }
+}
+
+pub struct Utf8CpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    utf8_info_or_err: Result<&'a ConstantUtf8Info>,
+}
+
+impl Utf8CpAccessor<'_> {
+    fn bytes_as_string(&self) -> Result<String> {
+        match &self.utf8_info_or_err {
+            Ok(info) => String::from_utf8(info.bytes.clone()).or_else(|e| error(e.to_string())),
+            Err(e) => Err(e.to_owned())
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> Utf8CpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Utf8(info)) => Utf8CpAccessor { constant_pool, utf8_info_or_err: Ok(&info) },
+            Ok(other_info) => Utf8CpAccessor {
+                constant_pool,
+                utf8_info_or_err: error(format!("The index must refer to CONSTANT_Utf8_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => Utf8CpAccessor { constant_pool, utf8_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> Utf8CpAccessor<'a> {
+        Utf8CpAccessor { constant_pool, utf8_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct IntegerCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    integer_info_or_err: Result<&'a ConstantIntegerInfo>,
+}
+
+impl IntegerCpAccessor<'_> {
+    fn bytes_as_integer(&self) -> Result<i32> {
+        match &self.integer_info_or_err {
+            Ok(info) => Ok(i32::from_be_bytes(info.bytes)),
+            Err(e) => Err(e.to_owned())
+        }
+    }
+}
+
+pub struct FloatCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    float_info_or_err: Result<&'a ConstantFloatInfo>,
+}
+
+impl FloatCpAccessor<'_> {
+    fn bytes_as_float(&self) -> Result<f32> {
+        match &self.float_info_or_err {
+            Ok(info) => Ok(f32::from_be_bytes(info.bytes)),
+            Err(e) => Err(e.to_owned())
+        }
+    }
+}
+
+pub struct LongCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    long_info_or_err: Result<&'a ConstantLongInfo>,
+}
+
+impl LongCpAccessor<'_> {
+    fn bytes_as_long(&self) -> Result<i64> {
+        match &self.long_info_or_err {
+            Ok(info) => Ok(i64::from_be_bytes([info.high_bytes, info.low_bytes].concat().try_into().unwrap())),
+            Err(e) => Err(e.to_owned())
+        }
+    }
+}
+
+pub struct DoubleCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    double_info_or_err: Result<&'a ConstantDoubleInfo>,
+}
+
+impl DoubleCpAccessor<'_> {
+    fn bytes_as_double(&self) -> Result<f64> {
+        match &self.double_info_or_err {
+            Ok(info) => Ok(f64::from_be_bytes([info.high_bytes, info.low_bytes].concat().try_into().unwrap())),
+            Err(e) => Err(e.to_owned())
         }
     }
 }
@@ -72,33 +149,392 @@ pub struct ClassCpAccessor<'a> {
 impl ClassCpAccessor<'_> {
     fn name(&self) -> Utf8CpAccessor {
         match &self.class_info_or_err {
-            Ok(class_info) => {
-                match get_constant_pool_info(&self.constant_pool, class_info.name_index) {
-                    Ok(CpInfo::Utf8(info)) => Utf8CpAccessor { constant_pool: self.constant_pool, utf8_info_or_err: Ok(&info) },
-                    Ok(other_info) => Utf8CpAccessor {
-                        constant_pool: self.constant_pool,
-                        utf8_info_or_err: error(format!("The name_index must refer to CONSTANT_Utf8_info structure, but {} found! name_index: {}", cp_info_name(other_info), class_info.name_index)),
-                    },
-                    Err(e) => Utf8CpAccessor { constant_pool: self.constant_pool, utf8_info_or_err: Err(e) }
-                }
-            }
-            Err(e) => Utf8CpAccessor { constant_pool: self.constant_pool, utf8_info_or_err: Err(e.to_owned()) }
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
         }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> ClassCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Class(info)) => ClassCpAccessor { constant_pool, class_info_or_err: Ok(&info) },
+            Ok(other_info) => ClassCpAccessor {
+                constant_pool,
+                class_info_or_err: error(format!("The index must refer to CONSTANT_Class_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => ClassCpAccessor { constant_pool, class_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> ClassCpAccessor<'a> {
+        ClassCpAccessor { constant_pool, class_info_or_err: Err(e.to_owned()) }
     }
 }
 
-pub struct Utf8CpAccessor<'a> {
+pub struct StringCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    utf8_info_or_err: Result<&'a ConstantUtf8Info>,
+    string_info_or_err: Result<&'a ConstantClassInfo>,
 }
 
-impl Utf8CpAccessor<'_> {
-    fn bytes_as_string(&self) -> Result<String> {
-
-        match &self.utf8_info_or_err {
-            Ok(utf8_info) => String::from_utf8(utf8_info.bytes.clone()).or_else(|e| error(e.to_string())),
-            Err(e) => Err(e.to_owned())
+impl StringCpAccessor<'_> {
+    fn name(&self) -> Utf8CpAccessor {
+        match &self.string_info_or_err {
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
         }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> StringCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Class(info)) => StringCpAccessor { constant_pool, string_info_or_err: Ok(&info) },
+            Ok(other_info) => StringCpAccessor {
+                constant_pool,
+                string_info_or_err: error(format!("The index must refer to CONSTANT_String_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => StringCpAccessor { constant_pool, string_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> StringCpAccessor<'a> {
+        StringCpAccessor { constant_pool, string_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct FieldrefCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    fieldref_info_or_err: Result<&'a ConstantFieldrefInfo>,
+}
+
+impl FieldrefCpAccessor<'_> {
+    fn class(&self) -> ClassCpAccessor {
+        match &self.fieldref_info_or_err {
+            Ok(info) => ClassCpAccessor::from(self.constant_pool, info.class_index),
+            Err(e) => ClassCpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+        match &self.fieldref_info_or_err {
+            Ok(info) => NameAndTypeCpAccessor::from(self.constant_pool, info.name_and_type_index),
+            Err(e) => NameAndTypeCpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> FieldrefCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Fieldref(info)) => FieldrefCpAccessor { constant_pool, fieldref_info_or_err: Ok(&info) },
+            Ok(other_info) => FieldrefCpAccessor {
+                constant_pool,
+                fieldref_info_or_err: error(format!("The index must refer to CONSTANT_Fieldref structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => FieldrefCpAccessor { constant_pool, fieldref_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> FieldrefCpAccessor<'a> {
+        FieldrefCpAccessor { constant_pool, fieldref_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct MethodrefCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    methodref_info_or_err: Result<&'a ConstantMethodrefInfo>,
+}
+
+impl MethodrefCpAccessor<'_> {
+    fn class(&self) -> ClassCpAccessor {
+        match &self.methodref_info_or_err {
+            Ok(info) => ClassCpAccessor::from(self.constant_pool, info.class_index),
+            Err(e) => ClassCpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+        match &self.methodref_info_or_err {
+            Ok(info) => NameAndTypeCpAccessor::from(self.constant_pool, info.name_and_type_index),
+            Err(e) => NameAndTypeCpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> MethodrefCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Methodref(info)) => MethodrefCpAccessor { constant_pool, methodref_info_or_err: Ok(&info) },
+            Ok(other_info) => MethodrefCpAccessor {
+                constant_pool,
+                methodref_info_or_err: error(format!("The index must refer to CONSTANT_Methodref_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => MethodrefCpAccessor { constant_pool, methodref_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> MethodrefCpAccessor<'a> {
+        MethodrefCpAccessor { constant_pool, methodref_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct InterfaceMethodrefCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    interface_methodref_info_or_err: Result<&'a ConstantInterfaceMethodrefInfo>,
+}
+
+impl InterfaceMethodrefCpAccessor<'_> {
+    fn class(&self) -> ClassCpAccessor {
+        match &self.interface_methodref_info_or_err {
+            Ok(info) => ClassCpAccessor::from(self.constant_pool, info.class_index),
+            Err(e) => ClassCpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+        match &self.interface_methodref_info_or_err {
+            Ok(info) => NameAndTypeCpAccessor::from(self.constant_pool, info.name_and_type_index),
+            Err(e) => NameAndTypeCpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> InterfaceMethodrefCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::InterfaceMethodref(info)) => InterfaceMethodrefCpAccessor { constant_pool, interface_methodref_info_or_err: Ok(&info) },
+            Ok(other_info) => InterfaceMethodrefCpAccessor {
+                constant_pool,
+                interface_methodref_info_or_err: error(format!("The index must refer to CONSTANT_InterfaceMethodref_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => InterfaceMethodrefCpAccessor { constant_pool, interface_methodref_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> InterfaceMethodrefCpAccessor<'a> {
+        InterfaceMethodrefCpAccessor { constant_pool, interface_methodref_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+
+pub struct NameAndTypeCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    name_and_type_info_or_err: Result<&'a ConstantNameAndTypeInfo>,
+}
+
+impl NameAndTypeCpAccessor<'_> {
+
+    fn name(&self) -> Utf8CpAccessor {
+        match &self.name_and_type_info_or_err {
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn descriptor(&self) -> Utf8CpAccessor {
+        match &self.name_and_type_info_or_err {
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.descriptor_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> NameAndTypeCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::NameAndType(info)) => NameAndTypeCpAccessor { constant_pool, name_and_type_info_or_err: Ok(&info) },
+            Ok(other_info) => NameAndTypeCpAccessor {
+                constant_pool,
+                name_and_type_info_or_err: error(format!("The index must refer to CONSTANT_NameAndType_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => NameAndTypeCpAccessor { constant_pool, name_and_type_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> NameAndTypeCpAccessor<'a> {
+        NameAndTypeCpAccessor { constant_pool, name_and_type_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct MethodHandleCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    method_handle_info_or_err: Result<&'a ConstantMethodHandleInfo>,
+}
+
+enum MethodHandleReference<'a> {
+    Fieldref(FieldrefCpAccessor<'a>),
+    Methodref(MethodrefCpAccessor<'a>),
+    InterfaceMethodref(InterfaceMethodrefCpAccessor<'a>),
+}
+
+impl MethodHandleCpAccessor<'_> {
+    fn reference(&self) -> Result<MethodHandleReference> {
+        self.method_handle_info_or_err.as_ref().map_err(|e| e.to_owned()).and_then(|method_handle_info| {
+            get_constant_pool_info(self.constant_pool, method_handle_info.reference_index).and_then(|cp_info| {
+                match cp_info {
+                    CpInfo::Fieldref(info) => Ok(MethodHandleReference::Fieldref(FieldrefCpAccessor { constant_pool: self.constant_pool, fieldref_info_or_err: Ok(info) })),
+                    CpInfo::Methodref(info) => Ok(MethodHandleReference::Methodref(MethodrefCpAccessor { constant_pool: self.constant_pool, methodref_info_or_err: Ok(info) })),
+                    CpInfo::InterfaceMethodref(info) => Ok(MethodHandleReference::InterfaceMethodref(InterfaceMethodrefCpAccessor { constant_pool: self.constant_pool, interface_methodref_info_or_err: Ok(info) })),
+                    other_info => error(format!("The index must refer to CONSTANT_Fieldref_info or CONSTANT_Methodref_info or CONSTANT_InterfaceMethodref_info, but {} found! index: {}", cp_info_name(other_info), method_handle_info.reference_index)),
+                }
+            })
+        })
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> MethodHandleCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::MethodHandle(info)) => MethodHandleCpAccessor { constant_pool, method_handle_info_or_err: Ok(&info) },
+            Ok(other_info) => MethodHandleCpAccessor {
+                constant_pool,
+                method_handle_info_or_err: error(format!("The index must refer to CONSTANT_MethodHandle_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => MethodHandleCpAccessor { constant_pool, method_handle_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> MethodHandleCpAccessor<'a> {
+        MethodHandleCpAccessor { constant_pool, method_handle_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct MethodTypeCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    method_type_info_or_err: Result<&'a ConstantMethodTypeInfo>,
+}
+
+impl MethodTypeCpAccessor<'_> {
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> MethodTypeCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::MethodType(info)) => MethodTypeCpAccessor { constant_pool, method_type_info_or_err: Ok(&info) },
+            Ok(other_info) => MethodTypeCpAccessor {
+                constant_pool,
+                method_type_info_or_err: error(format!("The index must refer to CONSTANT_MethodType_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => MethodTypeCpAccessor { constant_pool, method_type_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> MethodTypeCpAccessor<'a> {
+        MethodTypeCpAccessor { constant_pool, method_type_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct DynamicCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    dynamic_info_or_err: Result<&'a ConstantDynamicInfo>,
+}
+
+impl DynamicCpAccessor<'_> {
+
+    fn get_bootstrap_method_attr_index(&self) -> Result<u16> {
+        self.dynamic_info_or_err.as_ref()
+            .map(|info| { info.bootstrap_method_attr_index})
+            .map_err(|e| e.to_owned())
+    }
+
+    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+        match &self.dynamic_info_or_err {
+            Ok(info) => NameAndTypeCpAccessor::from(&self.constant_pool, info.name_and_type_index),
+            Err(e) => NameAndTypeCpAccessor::error(&self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> DynamicCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Dynamic(info)) => DynamicCpAccessor { constant_pool, dynamic_info_or_err: Ok(&info) },
+            Ok(other_info) => DynamicCpAccessor {
+                constant_pool,
+                dynamic_info_or_err: error(format!("The index must refer to CONSTANT_MethodType_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => DynamicCpAccessor { constant_pool, dynamic_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> DynamicCpAccessor<'a> {
+        DynamicCpAccessor { constant_pool, dynamic_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct InvokeDynamicCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    invoke_dynamic_info_or_err: Result<&'a ConstantInvokeDynamicInfo>,
+}
+
+impl InvokeDynamicCpAccessor<'_> {
+
+    fn get_bootstrap_method_attr_index(&self) -> Result<u16> {
+        self.invoke_dynamic_info_or_err.as_ref()
+            .map(|info| { info.bootstrap_method_attr_index})
+            .map_err(|e| e.to_owned())
+    }
+
+    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+        match &self.invoke_dynamic_info_or_err {
+            Ok(info) => NameAndTypeCpAccessor::from(&self.constant_pool, info.name_and_type_index),
+            Err(e) => NameAndTypeCpAccessor::error(&self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> InvokeDynamicCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::InvokeDynamic(info)) => InvokeDynamicCpAccessor { constant_pool, invoke_dynamic_info_or_err: Ok(&info) },
+            Ok(other_info) => InvokeDynamicCpAccessor {
+                constant_pool,
+                invoke_dynamic_info_or_err: error(format!("The index must refer to CONSTANT_MethodType_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => InvokeDynamicCpAccessor { constant_pool, invoke_dynamic_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> InvokeDynamicCpAccessor<'a> {
+        InvokeDynamicCpAccessor { constant_pool, invoke_dynamic_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct ModuleCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    module_info_or_err: Result<&'a ConstantModuleInfo>,
+}
+
+impl ModuleCpAccessor<'_> {
+    fn name(&self) -> Utf8CpAccessor {
+        match &self.module_info_or_err {
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> ModuleCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Module(info)) => ModuleCpAccessor { constant_pool, module_info_or_err: Ok(&info) },
+            Ok(other_info) => ModuleCpAccessor {
+                constant_pool,
+                module_info_or_err: error(format!("The index must refer to CONSTANT_String_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => ModuleCpAccessor { constant_pool, module_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> ModuleCpAccessor<'a> {
+        ModuleCpAccessor { constant_pool, module_info_or_err: Err(e.to_owned()) }
+    }
+}
+
+pub struct PackageCpAccessor<'a> {
+    constant_pool: &'a Vec<CpInfo>,
+    package_info_or_err: Result<&'a ConstantPackageInfo>,
+}
+
+impl PackageCpAccessor<'_> {
+    fn name(&self) -> Utf8CpAccessor {
+        match &self.package_info_or_err {
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
+        }
+    }
+
+    fn from(constant_pool: &Vec<CpInfo>, index: u16) -> PackageCpAccessor {
+        match get_constant_pool_info(constant_pool, index) {
+            Ok(CpInfo::Package(info)) => PackageCpAccessor { constant_pool, package_info_or_err: Ok(&info) },
+            Ok(other_info) => PackageCpAccessor {
+                constant_pool,
+                package_info_or_err: error(format!("The index must refer to CONSTANT_String_info structure, but {} found! index: {}", cp_info_name(other_info), index)),
+            },
+            Err(e) => PackageCpAccessor { constant_pool, package_info_or_err: Err(e) }
+        }
+    }
+
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> PackageCpAccessor<'a> {
+        PackageCpAccessor { constant_pool, package_info_or_err: Err(e.to_owned()) }
     }
 }
 

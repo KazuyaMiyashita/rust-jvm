@@ -60,27 +60,27 @@ pub struct ConstantUtf8Info {
 #[derive(Debug, PartialEq)]
 pub struct ConstantIntegerInfo {
     pub tag: CpInfoTag,
-    pub bytes: u32,
+    pub bytes: [u8; 4],
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ConstantFloatInfo {
     pub tag: CpInfoTag,
-    pub bytes: u32,
+    pub bytes: [u8; 4],
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ConstantLongInfo {
     pub tag: CpInfoTag,
-    pub high_bytes: u32,
-    pub low_bytes: u32,
+    pub high_bytes: [u8; 4],
+    pub low_bytes: [u8; 4],
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ConstantDoubleInfo {
     pub tag: CpInfoTag,
-    pub high_bytes: u32,
-    pub low_bytes: u32,
+    pub high_bytes: [u8; 4],
+    pub low_bytes: [u8; 4],
 }
 
 #[derive(Debug, PartialEq)]
