@@ -1,3 +1,5 @@
+use crate::class_file::error::{Result, error};
+
 #[derive(Debug, PartialEq)]
 pub struct MethodType {
     pub parameter_types: Vec<FieldType>,
@@ -55,12 +57,12 @@ peg::parser! {
     }
 }
 
-pub fn parse_field_type(parameter_descriptor: &str) -> Result<FieldType, String> {
-    descriptor_parser::field_type(parameter_descriptor).map_err(|_| format!("invalid parameter descriptor: {}", parameter_descriptor))
+pub fn parse_field_type(parameter_descriptor: &str) -> Result<FieldType> {
+    descriptor_parser::field_type(parameter_descriptor).or(error(format!("invalid parameter descriptor: {}", parameter_descriptor)))
 }
 
-pub fn parse_method_descriptor(method_descriptor: &str) -> Result<MethodType, String> {
-    descriptor_parser::method_type(method_descriptor).map_err(|_| format!("invalid method descriptor: {}", method_descriptor))
+pub fn parse_method_descriptor(method_descriptor: &str) -> Result<MethodType> {
+    descriptor_parser::method_type(method_descriptor).or(error(format!("invalid method descriptor: {}", method_descriptor)))
 }
 
 #[test]
@@ -79,7 +81,7 @@ fn test_parse_field_type() {
     );
     assert_eq!(
         parse_field_type("BBB"),
-        Err("invalid parameter descriptor: BBB".to_string())
+        error("invalid parameter descriptor: BBB".to_string())
     );
 }
 

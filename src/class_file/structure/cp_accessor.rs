@@ -1,17 +1,9 @@
 use super::*;
-use thiserror::Error;
-
-pub type Result<T> = std::result::Result<T, AccessError>;
-
-#[derive(Error, Debug, Clone, PartialEq)]
-#[error("Invalid class file. {message:}")]
-pub struct AccessError {
-    pub message: String,
-}
+use crate::class_file::error::{Error, Result};
 
 // utils
 fn error<T>(message: String) -> Result<T> {
-    Err(AccessError { message })
+    Err(Error { message: format!("Invalid cp_info. {}", message) })
 }
 
 fn cp_info_name(cp_info: &CpInfo) -> &str {
@@ -50,8 +42,10 @@ pub trait CpAccessor {
     fn access_as_utf8(&self, index: u16) -> Utf8CpAccessor;
     fn access_as_integer(&self, index: u16) -> IntegerCpAccessor;
     fn access_as_float(&self, index: u16) -> FloatCpAccessor;
+    fn access_as_long(&self, index: u16) -> LongCpAccessor;
     fn access_as_double(&self, index: u16) -> DoubleCpAccessor;
     fn access_as_class(&self, index: u16) -> ClassCpAccessor;
+    fn access_as_string(&self, index: u16) -> StringCpAccessor;
     fn access_as_fieldref(&self, index: u16) -> FieldrefCpAccessor;
     fn access_as_methodref(&self, index: u16) -> MethodrefCpAccessor;
     fn access_as_interface_methodref(&self, index: u16) -> InterfaceMethodrefCpAccessor;
@@ -77,12 +71,20 @@ impl CpAccessor for &Vec<CpInfo> {
         FloatCpAccessor::from(self, index)
     }
 
+    fn access_as_long(&self, index: u16) -> LongCpAccessor {
+        LongCpAccessor::from(self, index)
+    }
+
     fn access_as_double(&self, index: u16) -> DoubleCpAccessor {
         DoubleCpAccessor::from(self, index)
     }
 
     fn access_as_class(&self, index: u16) -> ClassCpAccessor {
         ClassCpAccessor::from(self, index)
+    }
+
+    fn access_as_string(&self, index: u16) -> StringCpAccessor {
+        StringCpAccessor::from(self, index)
     }
 
     fn access_as_fieldref(&self, index: u16) -> FieldrefCpAccessor {
@@ -126,13 +128,17 @@ impl CpAccessor for &Vec<CpInfo> {
     }
 }
 
+// Is it possible to commonize code using generics?
+// `struct CpAccessor<'a, T>` comes to mind, but I don't want to use it in the form of CpAccessor::<ConstantUtf8Info>::from(..) .
+// I was hoping that the compiler would look at the type and make a judgment, but it doesn't work
+
 pub struct Utf8CpAccessor<'a> {
-    constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantUtf8Info>,
+    #[allow(unused)] constant_pool: &'a Vec<CpInfo>,
+    pub info_or_err: Result<&'a ConstantUtf8Info>,
 }
 
 impl Utf8CpAccessor<'_> {
-    fn bytes_as_string(&self) -> Result<String> {
+    pub fn bytes_as_string(&self) -> Result<String> {
         match &self.info_or_err {
             Ok(info) => String::from_utf8(info.bytes.clone()).or_else(|e| error(e.to_string())),
             Err(e) => Err(e.to_owned())
@@ -150,18 +156,18 @@ impl Utf8CpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> Utf8CpAccessor<'a> {
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> Utf8CpAccessor<'a> {
         Utf8CpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct IntegerCpAccessor<'a> {
-    constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantIntegerInfo>,
+    #[allow(unused)] constant_pool: &'a Vec<CpInfo>,
+    pub info_or_err: Result<&'a ConstantIntegerInfo>,
 }
 
 impl IntegerCpAccessor<'_> {
-    fn bytes_as_integer(&self) -> Result<i32> {
+    pub fn bytes_as_integer(&self) -> Result<i32> {
         match &self.info_or_err {
             Ok(info) => Ok(i32::from_be_bytes(info.bytes)),
             Err(e) => Err(e.to_owned())
@@ -179,18 +185,19 @@ impl IntegerCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> IntegerCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> IntegerCpAccessor<'a> {
         IntegerCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct FloatCpAccessor<'a> {
-    constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantFloatInfo>,
+    #[allow(unused)] constant_pool: &'a Vec<CpInfo>,
+    pub info_or_err: Result<&'a ConstantFloatInfo>,
 }
 
 impl FloatCpAccessor<'_> {
-    fn bytes_as_float(&self) -> Result<f32> {
+    pub fn bytes_as_float(&self) -> Result<f32> {
         match &self.info_or_err {
             Ok(info) => Ok(f32::from_be_bytes(info.bytes)),
             Err(e) => Err(e.to_owned())
@@ -208,18 +215,19 @@ impl FloatCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> FloatCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> FloatCpAccessor<'a> {
         FloatCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct LongCpAccessor<'a> {
-    constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantLongInfo>,
+    #[allow(unused)] constant_pool: &'a Vec<CpInfo>,
+    pub info_or_err: Result<&'a ConstantLongInfo>,
 }
 
 impl LongCpAccessor<'_> {
-    fn bytes_as_long(&self) -> Result<i64> {
+    pub fn bytes_as_long(&self) -> Result<i64> {
         match &self.info_or_err {
             Ok(info) => Ok(i64::from_be_bytes([info.high_bytes, info.low_bytes].concat().try_into().unwrap())),
             Err(e) => Err(e.to_owned())
@@ -237,18 +245,19 @@ impl LongCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> LongCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> LongCpAccessor<'a> {
         LongCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct DoubleCpAccessor<'a> {
-    constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantDoubleInfo>,
+    #[allow(unused)] constant_pool: &'a Vec<CpInfo>,
+    pub info_or_err: Result<&'a ConstantDoubleInfo>,
 }
 
 impl DoubleCpAccessor<'_> {
-    fn bytes_as_double(&self) -> Result<f64> {
+    pub fn bytes_as_double(&self) -> Result<f64> {
         match &self.info_or_err {
             Ok(info) => Ok(f64::from_be_bytes([info.high_bytes, info.low_bytes].concat().try_into().unwrap())),
             Err(e) => Err(e.to_owned())
@@ -266,18 +275,19 @@ impl DoubleCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> DoubleCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> DoubleCpAccessor<'a> {
         DoubleCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct ClassCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantClassInfo>,
+    pub info_or_err: Result<&'a ConstantClassInfo>,
 }
 
 impl ClassCpAccessor<'_> {
-    fn name(&self) -> Utf8CpAccessor {
+    pub fn name(&self) -> Utf8CpAccessor {
         match &self.info_or_err {
             Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
             Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
@@ -295,18 +305,18 @@ impl ClassCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> ClassCpAccessor<'a> {
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> ClassCpAccessor<'a> {
         ClassCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct StringCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantClassInfo>,
+    pub info_or_err: Result<&'a ConstantClassInfo>,
 }
 
 impl StringCpAccessor<'_> {
-    fn name(&self) -> Utf8CpAccessor {
+    pub fn name(&self) -> Utf8CpAccessor {
         match &self.info_or_err {
             Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
             Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
@@ -324,25 +334,26 @@ impl StringCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> StringCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> StringCpAccessor<'a> {
         StringCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct FieldrefCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantFieldrefInfo>,
+    pub info_or_err: Result<&'a ConstantFieldrefInfo>,
 }
 
 impl FieldrefCpAccessor<'_> {
-    fn class(&self) -> ClassCpAccessor {
+    pub fn class(&self) -> ClassCpAccessor {
         match &self.info_or_err {
             Ok(info) => ClassCpAccessor::from(self.constant_pool, info.class_index),
             Err(e) => ClassCpAccessor::error(self.constant_pool, e)
         }
     }
 
-    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+    pub fn name_and_type(&self) -> NameAndTypeCpAccessor {
         match &self.info_or_err {
             Ok(info) => NameAndTypeCpAccessor::from(self.constant_pool, info.name_and_type_index),
             Err(e) => NameAndTypeCpAccessor::error(self.constant_pool, e)
@@ -360,25 +371,26 @@ impl FieldrefCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> FieldrefCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> FieldrefCpAccessor<'a> {
         FieldrefCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct MethodrefCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantMethodrefInfo>,
+    pub info_or_err: Result<&'a ConstantMethodrefInfo>,
 }
 
 impl MethodrefCpAccessor<'_> {
-    fn class(&self) -> ClassCpAccessor {
+    pub fn class(&self) -> ClassCpAccessor {
         match &self.info_or_err {
             Ok(info) => ClassCpAccessor::from(self.constant_pool, info.class_index),
             Err(e) => ClassCpAccessor::error(self.constant_pool, e)
         }
     }
 
-    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+    pub fn name_and_type(&self) -> NameAndTypeCpAccessor {
         match &self.info_or_err {
             Ok(info) => NameAndTypeCpAccessor::from(self.constant_pool, info.name_and_type_index),
             Err(e) => NameAndTypeCpAccessor::error(self.constant_pool, e)
@@ -396,25 +408,26 @@ impl MethodrefCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> MethodrefCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> MethodrefCpAccessor<'a> {
         MethodrefCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct InterfaceMethodrefCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantInterfaceMethodrefInfo>,
+    pub info_or_err: Result<&'a ConstantInterfaceMethodrefInfo>,
 }
 
 impl InterfaceMethodrefCpAccessor<'_> {
-    fn class(&self) -> ClassCpAccessor {
+    pub fn class(&self) -> ClassCpAccessor {
         match &self.info_or_err {
             Ok(info) => ClassCpAccessor::from(self.constant_pool, info.class_index),
             Err(e) => ClassCpAccessor::error(self.constant_pool, e)
         }
     }
 
-    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+    pub fn name_and_type(&self) -> NameAndTypeCpAccessor {
         match &self.info_or_err {
             Ok(info) => NameAndTypeCpAccessor::from(self.constant_pool, info.name_and_type_index),
             Err(e) => NameAndTypeCpAccessor::error(self.constant_pool, e)
@@ -432,7 +445,8 @@ impl InterfaceMethodrefCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> InterfaceMethodrefCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> InterfaceMethodrefCpAccessor<'a> {
         InterfaceMethodrefCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
@@ -440,19 +454,19 @@ impl InterfaceMethodrefCpAccessor<'_> {
 
 pub struct NameAndTypeCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantNameAndTypeInfo>,
+    pub info_or_err: Result<&'a ConstantNameAndTypeInfo>,
 }
 
 impl NameAndTypeCpAccessor<'_> {
 
-    fn name(&self) -> Utf8CpAccessor {
+    pub fn name(&self) -> Utf8CpAccessor {
         match &self.info_or_err {
             Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
             Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
         }
     }
 
-    fn descriptor(&self) -> Utf8CpAccessor {
+    pub fn descriptor(&self) -> Utf8CpAccessor {
         match &self.info_or_err {
             Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.descriptor_index),
             Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
@@ -470,24 +484,29 @@ impl NameAndTypeCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> NameAndTypeCpAccessor<'a> {
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> NameAndTypeCpAccessor<'a> {
         NameAndTypeCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct MethodHandleCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantMethodHandleInfo>,
+    pub info_or_err: Result<&'a ConstantMethodHandleInfo>,
 }
 
-enum MethodHandleReference<'a> {
+pub enum MethodHandleReference<'a> {
     Fieldref(FieldrefCpAccessor<'a>),
     Methodref(MethodrefCpAccessor<'a>),
     InterfaceMethodref(InterfaceMethodrefCpAccessor<'a>),
 }
 
 impl MethodHandleCpAccessor<'_> {
-    fn reference(&self) -> Result<MethodHandleReference> {
+
+    pub fn reference_kind(&self) -> Result<u8> {
+        self.info_or_err.as_ref().map_err(|e|e.to_owned()).map(|info| { info.reference_kind })
+    }
+
+    pub fn reference(&self) -> Result<MethodHandleReference> {
         self.info_or_err.as_ref().map_err(|e| e.to_owned()).and_then(|method_handle_info| {
             get_constant_pool_info(self.constant_pool, method_handle_info.reference_index).and_then(|cp_info| {
                 match cp_info {
@@ -511,17 +530,26 @@ impl MethodHandleCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> MethodHandleCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> MethodHandleCpAccessor<'a> {
         MethodHandleCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct MethodTypeCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantMethodTypeInfo>,
+    pub info_or_err: Result<&'a ConstantMethodTypeInfo>,
 }
 
 impl MethodTypeCpAccessor<'_> {
+
+    pub fn descriptor(&self) -> Utf8CpAccessor {
+        match &self.info_or_err {
+            Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.descriptor_index),
+            Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
+        }
+    }
+    
     fn from(constant_pool: &Vec<CpInfo>, index: u16) -> MethodTypeCpAccessor {
         match get_constant_pool_info(constant_pool, index) {
             Ok(CpInfo::MethodType(info)) => MethodTypeCpAccessor { constant_pool, info_or_err: Ok(&info) },
@@ -533,25 +561,26 @@ impl MethodTypeCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> MethodTypeCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> MethodTypeCpAccessor<'a> {
         MethodTypeCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct DynamicCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantDynamicInfo>,
+    pub info_or_err: Result<&'a ConstantDynamicInfo>,
 }
 
 impl DynamicCpAccessor<'_> {
 
-    fn get_bootstrap_method_attr_index(&self) -> Result<u16> {
+    pub fn get_bootstrap_method_attr_index(&self) -> Result<u16> {
         self.info_or_err.as_ref()
             .map(|info| { info.bootstrap_method_attr_index})
             .map_err(|e| e.to_owned())
     }
 
-    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+    pub fn name_and_type(&self) -> NameAndTypeCpAccessor {
         match &self.info_or_err {
             Ok(info) => NameAndTypeCpAccessor::from(&self.constant_pool, info.name_and_type_index),
             Err(e) => NameAndTypeCpAccessor::error(&self.constant_pool, e)
@@ -569,25 +598,26 @@ impl DynamicCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> DynamicCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> DynamicCpAccessor<'a> {
         DynamicCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct InvokeDynamicCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantInvokeDynamicInfo>,
+    pub info_or_err: Result<&'a ConstantInvokeDynamicInfo>,
 }
 
 impl InvokeDynamicCpAccessor<'_> {
 
-    fn get_bootstrap_method_attr_index(&self) -> Result<u16> {
+    pub fn get_bootstrap_method_attr_index(&self) -> Result<u16> {
         self.info_or_err.as_ref()
             .map(|info| { info.bootstrap_method_attr_index})
             .map_err(|e| e.to_owned())
     }
 
-    fn name_and_type(&self) -> NameAndTypeCpAccessor {
+    pub fn name_and_type(&self) -> NameAndTypeCpAccessor {
         match &self.info_or_err {
             Ok(info) => NameAndTypeCpAccessor::from(&self.constant_pool, info.name_and_type_index),
             Err(e) => NameAndTypeCpAccessor::error(&self.constant_pool, e)
@@ -605,18 +635,19 @@ impl InvokeDynamicCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> InvokeDynamicCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> InvokeDynamicCpAccessor<'a> {
         InvokeDynamicCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct ModuleCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantModuleInfo>,
+    pub info_or_err: Result<&'a ConstantModuleInfo>,
 }
 
 impl ModuleCpAccessor<'_> {
-    fn name(&self) -> Utf8CpAccessor {
+    pub fn name(&self) -> Utf8CpAccessor {
         match &self.info_or_err {
             Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
             Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
@@ -634,18 +665,19 @@ impl ModuleCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> ModuleCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> ModuleCpAccessor<'a> {
         ModuleCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
 
 pub struct PackageCpAccessor<'a> {
     constant_pool: &'a Vec<CpInfo>,
-    info_or_err: Result<&'a ConstantPackageInfo>,
+    pub info_or_err: Result<&'a ConstantPackageInfo>,
 }
 
 impl PackageCpAccessor<'_> {
-    fn name(&self) -> Utf8CpAccessor {
+    pub fn name(&self) -> Utf8CpAccessor {
         match &self.info_or_err {
             Ok(info) => Utf8CpAccessor::from(self.constant_pool, info.name_index),
             Err(e) => Utf8CpAccessor::error(self.constant_pool, e)
@@ -663,7 +695,8 @@ impl PackageCpAccessor<'_> {
         }
     }
 
-    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a AccessError) -> PackageCpAccessor<'a> {
+    #[allow(unused)]
+    fn error<'a>(constant_pool: &'a Vec<CpInfo>, e: &'a Error) -> PackageCpAccessor<'a> {
         PackageCpAccessor { constant_pool, info_or_err: Err(e.to_owned()) }
     }
 }
