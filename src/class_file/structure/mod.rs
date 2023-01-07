@@ -202,12 +202,28 @@ pub struct MethodInfo {
     pub attributes: Vec<AttributeInfo>, // FIXME! First, look at the constant_pool using descriptor_index to determine the type of Attribute! There is more than CodeAttributeInfo!
 }
 
+// WIP
+#[derive(Debug, PartialEq)]
+pub enum Attribute {
+    ConstantValue(ConstantValueAttribute),
+    Code(CodeAttributeInfo),
+    StackMapTable(StackMapTableAttribute),
+    BootstrapMethods(BootstrapMethodsAttribute),
+    General(AttributeInfo),
+}
 
 #[derive(Debug, PartialEq)]
 pub struct AttributeInfo {
     pub attribute_name_index: u16,
     pub attribute_length: u32,
     pub info: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ConstantValueAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub constantvalue_index: u16,
 }
 
 // 4.7.3. The Code Attribute
@@ -328,4 +344,19 @@ pub struct ExceptionTable {
     pub end_pc: u16,
     pub handler_pc: u16,
     pub catch_type: u16,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BootstrapMethodsAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub num_bootstrap_methods: u16,
+    pub bootstrap_methods: Vec<BootstrapMethod>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BootstrapMethod {
+    pub bootstrap_method_ref: u16,
+    pub num_bootstrap_arguments: u16,
+    pub bootstrap_arguments: Vec<u16>
 }
