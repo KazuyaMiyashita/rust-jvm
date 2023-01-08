@@ -1,4 +1,4 @@
-use crate::class_file::structure::*;
+use crate::class_file::structure::constant_pool::*;
 use crate::class_file::error::{Error, Result};
 
 // utils

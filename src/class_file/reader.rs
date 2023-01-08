@@ -1,4 +1,6 @@
-use super::structure::*;
+use crate::class_file::structure::root::*;
+use crate::class_file::structure::constant_pool::*;
+use crate::class_file::structure::attribute::*;
 use super::structure_utils::cp_accessor::*;
 use super::error::{Error, Result};
 use super::checker;

@@ -1,5 +1,10 @@
 use crate::class_file::error::{Error, Result};
-use crate::class_file::structure::*;
+use crate::class_file::structure::root::*;
+use crate::class_file::structure::constant_pool::*;
+
+#[allow(unused_imports)]
+use crate::class_file::structure::attribute::*;
+
 use crate::class_file::structure_utils::cp_accessor::*;
 
 #[allow(unused)]
