@@ -1,5 +1,5 @@
 use super::structure::*;
-use super::structure::cp_accessor::*;
+use super::structure_utils::cp_accessor::*;
 use super::error::{Error, Result};
 use super::checker;
 
@@ -595,13 +595,11 @@ impl Reader for Require {
     fn read(bytes: &[u8], offset: &mut usize) -> Result<Require> {
         let requires_index: u16 = Reader::read(&bytes, &mut *offset)?;
         let requires_flags: u16 = Reader::read(&bytes, &mut *offset)?;
-        let requires_to_count: u16 = Reader::read(&bytes, &mut *offset)?;
-        let requires_to_index: Vec<u16> = VecReader::read(&bytes, &mut *offset, requires_to_count as u16 as usize)?;
+        let requires_version_index: u16 = Reader::read(&bytes, &mut *offset)?;
         Ok(Require {
             requires_index,
             requires_flags,
-            requires_to_count,
-            requires_to_index,
+            requires_version_index,
         })
     }
 }

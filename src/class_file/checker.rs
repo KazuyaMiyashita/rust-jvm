@@ -1,6 +1,6 @@
 use crate::class_file::error::{Error, Result};
 use crate::class_file::structure::*;
-use crate::class_file::structure::cp_accessor::*;
+use crate::class_file::structure_utils::cp_accessor::*;
 
 #[allow(unused)]
 use super::descriptor::{MethodType, ReturnType, parse_field_type, parse_method_descriptor};

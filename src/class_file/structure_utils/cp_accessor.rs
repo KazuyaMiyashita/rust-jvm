@@ -1,4 +1,4 @@
-use super::*;
+use crate::class_file::structure::*;
 use crate::class_file::error::{Error, Result};
 
 // utils

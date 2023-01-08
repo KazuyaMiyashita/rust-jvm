@@ -1,6 +1,3 @@
-pub mod cp_accessor;
-pub mod display;
-
 // 4.1. The ClassFile Structure
 // https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.1
 #[derive(Debug, PartialEq)]
@@ -399,8 +396,7 @@ pub struct ModuleAttribute {
 pub struct Require {
     pub requires_index: u16,
     pub requires_flags: u16,
-    pub requires_to_count: u16,
-    pub requires_to_index: Vec<u16>,
+    pub requires_version_index: u16,
 }
 
 #[derive(Debug, PartialEq)]

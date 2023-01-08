@@ -61,14 +61,37 @@ fn test() {
         attributes_count: 2,
         attributes: vec![
             Attribute::General(AttributeInfo {
-                attribute_name_index: 0x0003,
+                attribute_name_index: 3,
                 attribute_length: 2,
                 info: vec![0x00, 0x04],
             }),
-            Attribute::General(AttributeInfo {
-                attribute_name_index: 0x0005,
+            Attribute::Module(ModuleAttribute {
+                attribute_name_index: 5,
                 attribute_length: 28,
-                info: vec![0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x08, 0x80, 0x00, 0x00, 0x0a, 0x00, 0x0b, 0x00, 0x00, 0x00, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
+                module_name_index: 6,
+                module_flags: 0,
+                module_version_index: 0,
+                requires_count: 2,
+                requires: vec![
+                    Require {
+                        requires_index: 8,
+                        requires_flags: 32768,
+                        requires_version_index: 10,
+                    },
+                    Require {
+                        requires_index: 11,
+                        requires_flags: 0,
+                        requires_version_index: 10,
+                    },
+                ],
+                exports_count: 0,
+                exports: vec![],
+                opens_count: 0,
+                opens: vec![],
+                uses_count: 0,
+                uses_index: vec![],
+                provides_count: 0,
+                provides: vec![],
             }),
         ],
     });
