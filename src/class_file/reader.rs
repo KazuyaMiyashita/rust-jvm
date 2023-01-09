@@ -463,7 +463,35 @@ impl ReaderWithCp for Attribute {
                     provides_count,
                     provides,
                 })
-            }
+            },
+            "NestHost" => {
+                let host_class_index: u16 =   Reader::read(&bytes, &mut *offset)?;
+                Attribute::NestHost(NestHostAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    host_class_index,
+                })
+            },
+            "NestMembers" => {
+                let number_of_classes: u16 =   Reader::read(&bytes, &mut *offset)?;
+                let classes: Vec<u16> = VecReader::read(&bytes, &mut *offset, number_of_classes as usize)?;
+                Attribute::NestMembers(NestMembersAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    number_of_classes,
+                    classes
+                })
+            },
+            "PermittedSubclasses" => {
+                let number_of_classes: u16 =   Reader::read(&bytes, &mut *offset)?;
+                let classes: Vec<u16> = VecReader::read(&bytes, &mut *offset, number_of_classes as usize)?;
+                Attribute::PermittedSubclasses(PermittedSubclassesAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    number_of_classes,
+                    classes
+                })
+            },
             _ => {
                 let info: Vec<u8> = VecReader::read(&bytes, &mut *offset, attribute_length as usize)?;
                 Attribute::General(AttributeInfo {

@@ -1,4 +1,5 @@
-
+/// 4.7. Attributes
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7
 #[derive(Debug, PartialEq)]
 pub enum Attribute {
     General(AttributeInfo),
@@ -8,6 +9,9 @@ pub enum Attribute {
     BootstrapMethods(BootstrapMethodsAttribute),
     MethodParameters(MethodParametersAttribute),
     Module(ModuleAttribute),
+    NestHost(NestHostAttribute),
+    NestMembers(NestMembersAttribute),
+    PermittedSubclasses(PermittedSubclassesAttribute)
 }
 
 #[derive(Debug, PartialEq)]
@@ -144,6 +148,8 @@ pub struct ExceptionTable {
     pub catch_type: u16,
 }
 
+/// 4.7.23. The BootstrapMethods Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.23
 #[derive(Debug, PartialEq)]
 pub struct BootstrapMethodsAttribute {
     pub attribute_name_index: u16,
@@ -159,6 +165,8 @@ pub struct BootstrapMethod {
     pub bootstrap_arguments: Vec<u16>,
 }
 
+/// 4.7.24. The MethodParameters Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.24
 #[derive(Debug, PartialEq)]
 pub struct MethodParametersAttribute {
     pub attribute_name_index: u16,
@@ -173,6 +181,8 @@ pub struct Parameter {
     pub access_flags: u16,
 }
 
+/// 4.7.25. The Module Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.25
 #[derive(Debug, PartialEq)]
 pub struct ModuleAttribute {
     pub attribute_name_index: u16,
@@ -220,4 +230,33 @@ pub struct Provide {
     pub provides_index: u16,
     pub provides_with_count: u16,
     pub provides_with_index: Vec<u16>,
+}
+
+/// 4.7.28. The NestHost Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.28
+#[derive(Debug, PartialEq)]
+pub struct NestHostAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub host_class_index: u16,
+}
+
+/// 4.7.29. The NestMembers Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.29
+#[derive(Debug, PartialEq)]
+pub struct NestMembersAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub number_of_classes: u16,
+    pub classes: Vec<u16>
+}
+
+/// 4.7.31. The PermittedSubclasses Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.31
+#[derive(Debug, PartialEq)]
+pub struct PermittedSubclassesAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub number_of_classes: u16,
+    pub classes: Vec<u16>
 }

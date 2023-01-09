@@ -13,6 +13,9 @@ impl fmt::Display for Attribute {
             Attribute::BootstrapMethods(attribute) => attribute.fmt(f),
             Attribute::MethodParameters(attribute) => attribute.fmt(f),
             Attribute::Module(attribute) => attribute.fmt(f),
+            Attribute::NestHost(attribute) => attribute.fmt(f),
+            Attribute::NestMembers(attribute) => attribute.fmt(f),
+            Attribute::PermittedSubclasses(attribute) => attribute.fmt(f)
         }
     }
 }
@@ -287,6 +290,41 @@ impl fmt::Display for Provide {
         let provides_with_index_str: String = self.provides_with_index.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", ");
         write!(f, "    provides_with_index: vec![{}],\n", provides_with_index_str)?;
         write!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for NestHostAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::NestHost(NestHostAttribute {{\n")?;
+        write!(f, "    attribute_name_index: {},\n", self.attribute_name_index)?;
+        write!(f, "    attribute_length: {},\n", self.attribute_length)?;
+        write!(f, "    host_class_index: {},\n", self.host_class_index)?;
+        write!(f, "}})")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for NestMembersAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::NestMembers(NestMembersAttribute {{\n")?;
+        write!(f, "    attribute_name_index: {},\n", self.attribute_name_index)?;
+        write!(f, "    attribute_length: {},\n", self.attribute_length)?;
+        write!(f, "    number_of_classes: {},\n", self.number_of_classes)?;
+        write!(f, "    classes: vec![{}],\n", self.classes.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "))?;
+        write!(f, "}})")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for PermittedSubclassesAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::PermittedSubclasses(PermittedSubclassesAttribute {{\n")?;
+        write!(f, "    attribute_name_index: {},\n", self.attribute_name_index)?;
+        write!(f, "    attribute_length: {},\n", self.attribute_length)?;
+        write!(f, "    number_of_classes: {},\n", self.number_of_classes)?;
+        write!(f, "    classes: vec![{}],\n", self.classes.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "))?;
+        write!(f, "}})")?;
         Ok(())
     }
 }
