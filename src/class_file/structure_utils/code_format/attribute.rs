@@ -10,6 +10,9 @@ impl fmt::Display for Attribute {
             Attribute::ConstantValue(attribute) => attribute.fmt(f),
             Attribute::Code(attribute) => attribute.fmt(f),
             Attribute::StackMapTable(attribute) => attribute.fmt(f),
+            Attribute::Exceptions(attribute) => attribute.fmt(f),
+            Attribute::InnerClasses(attribute) => attribute.fmt(f),
+            Attribute::EnclosingMethod(attribute) => attribute.fmt(f),
             Attribute::BootstrapMethods(attribute) => attribute.fmt(f),
             Attribute::MethodParameters(attribute) => attribute.fmt(f),
             Attribute::Module(attribute) => attribute.fmt(f),
@@ -150,6 +153,58 @@ impl fmt::Display for VerificationTypeInfo {
             }
         };
         write!(f, "{}", str)
+    }
+}
+
+impl fmt::Display for ExceptionsAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::Exceptions(ExceptionsAttribute {{\n")?;
+        write!(f, "    attribute_name_index: {},\n", self.attribute_name_index)?;
+        write!(f, "    attribute_length: {},\n", self.attribute_length)?;
+        write!(f, "    number_of_exceptions: {},\n", self.number_of_exceptions)?;
+        write!(f, "    exception_index_table: vec![{}],\n", self.exception_index_table.iter().map(|x| x.to_string()).collect::<Vec<String>>().join(", "))?;
+        write!(f, "}})")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for InnerClassesAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::InnerClasses(InnerClassesAttribute {{\n")?;
+        write!(f, "    attribute_name_index: {},\n", self.attribute_name_index)?;
+        write!(f, "    attribute_length: {},\n", self.attribute_length)?;
+        write!(f, "    number_of_classes: {},\n", self.number_of_classes)?;
+        write!(f, "    classes: vec![\n")?;
+        self.classes.iter().try_for_each(|x| {
+            write!(f, "{},\n", padding(x.to_string(), 8))
+        })?;
+        write!(f, "    ]\n")?;
+        write!(f, "}})")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for InnerClassesAttributeClass {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::InnerClassesAttributeClass {{\n")?;
+        write!(f, "    inner_class_info_index: {},\n", self.inner_class_info_index)?;
+        write!(f, "    outer_class_info_index: {},\n", self.outer_class_info_index)?;
+        write!(f, "    inner_name_index: {},\n", self.inner_name_index)?;
+        write!(f, "    inner_class_access_flags: {},\n", self.inner_class_access_flags)?;
+        write!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for EnclosingMethodAttribute {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Attribute::EnclosingMethod(EnclosingMethodAttribute {{\n")?;
+        write!(f, "    attribute_name_index: {},\n", self.attribute_name_index)?;
+        write!(f, "    attribute_length: {},\n", self.attribute_length)?;
+        write!(f, "    class_index: {},\n", self.class_index)?;
+        write!(f, "    method_index: {},\n", self.method_index)?;
+        write!(f, "}})")?;
+        Ok(())
     }
 }
 

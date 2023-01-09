@@ -412,6 +412,36 @@ impl ReaderWithCp for Attribute {
                     entries,
                 })
             }
+            "Exceptions" => {
+                let number_of_exceptions: u16 = Reader::read(&bytes, &mut *offset)?;
+                let exception_index_table: Vec<u16> = VecReader::read(&bytes, &mut *offset, number_of_exceptions as usize)?;
+                Attribute::Exceptions(ExceptionsAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    number_of_exceptions,
+                    exception_index_table,
+                })
+            }
+            "InnerClasses" => {
+                let number_of_classes: u16 =  Reader::read(&bytes, &mut *offset)?;
+                let classes:  Vec<InnerClassesAttributeClass> = VecReader::read(&bytes, &mut *offset, number_of_classes as usize)?;
+                Attribute::InnerClasses(InnerClassesAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    number_of_classes,
+                    classes,
+                })
+            }
+            "EnclosingMethod" => {
+                let class_index: u16 =  Reader::read(&bytes, &mut *offset)?;
+                let method_index: u16 =  Reader::read(&bytes, &mut *offset)?;
+                Attribute::EnclosingMethod(EnclosingMethodAttribute {
+                    attribute_name_index,
+                    attribute_length,
+                    class_index,
+                    method_index,
+                })
+            }
             "BootstrapMethods" => {
                 let num_bootstrap_methods: u16 = Reader::read(&bytes, &mut *offset)?;
                 let bootstrap_methods: Vec<BootstrapMethod> = VecReader::read(&bytes, &mut *offset, num_bootstrap_methods as usize)?;
@@ -591,6 +621,21 @@ impl Reader for ExceptionTable {
             end_pc,
             handler_pc,
             catch_type,
+        })
+    }
+}
+
+impl Reader for InnerClassesAttributeClass {
+    fn read(bytes: &[u8], offset: &mut usize) -> Result<InnerClassesAttributeClass> {
+        let inner_class_info_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let outer_class_info_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let inner_name_index: u16 = Reader::read(&bytes, &mut *offset)?;
+        let inner_class_access_flags: u16 = Reader::read(&bytes, &mut *offset)?;
+        Ok(InnerClassesAttributeClass {
+            inner_class_info_index,
+            outer_class_info_index,
+            inner_name_index,
+            inner_class_access_flags,
         })
     }
 }

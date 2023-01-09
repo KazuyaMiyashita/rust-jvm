@@ -6,6 +6,9 @@ pub enum Attribute {
     ConstantValue(ConstantValueAttribute),
     Code(CodeAttributeInfo),
     StackMapTable(StackMapTableAttribute),
+    Exceptions(ExceptionsAttribute),
+    InnerClasses(InnerClassesAttribute),
+    EnclosingMethod(EnclosingMethodAttribute),
     BootstrapMethods(BootstrapMethodsAttribute),
     MethodParameters(MethodParametersAttribute),
     Module(ModuleAttribute),
@@ -43,6 +46,14 @@ pub struct CodeAttributeInfo {
     pub exception_table: Vec<ExceptionTable>,
     pub attributes_count: u16,
     pub attributes: Vec<Attribute>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ExceptionTable {
+    pub start_pc: u16,
+    pub end_pc: u16,
+    pub handler_pc: u16,
+    pub catch_type: u16,
 }
 
 // 4.7.4. The StackMapTable Attribute
@@ -139,13 +150,42 @@ pub enum VerificationTypeInfo {
     },
 }
 
+/// 4.7.5. The Exceptions Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.5
+#[derive(Debug, PartialEq)]
+pub struct ExceptionsAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub number_of_exceptions: u16,
+    pub exception_index_table: Vec<u16>
+}
+
+/// 4.7.6. The InnerClasses Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.6
+#[derive(Debug, PartialEq)]
+pub struct InnerClassesAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub number_of_classes: u16,
+    pub classes: Vec<InnerClassesAttributeClass>
+}
 
 #[derive(Debug, PartialEq)]
-pub struct ExceptionTable {
-    pub start_pc: u16,
-    pub end_pc: u16,
-    pub handler_pc: u16,
-    pub catch_type: u16,
+pub struct InnerClassesAttributeClass {
+    pub inner_class_info_index: u16,
+    pub outer_class_info_index: u16,
+    pub inner_name_index: u16,
+    pub inner_class_access_flags: u16,
+}
+
+/// 4.7.7. The EnclosingMethod Attribute
+/// https://docs.oracle.com/javase/specs/jvms/se17/html/jvms-4.html#jvms-4.7.7
+#[derive(Debug, PartialEq)]
+pub struct EnclosingMethodAttribute {
+    pub attribute_name_index: u16,
+    pub attribute_length: u32,
+    pub class_index: u16,
+    pub method_index: u16,
 }
 
 /// 4.7.23. The BootstrapMethods Attribute
